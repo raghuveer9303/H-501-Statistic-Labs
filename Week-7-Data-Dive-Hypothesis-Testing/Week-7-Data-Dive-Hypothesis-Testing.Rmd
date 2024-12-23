@@ -1,0 +1,223 @@
+---
+title: "Week 7 - Data Dive - Hypothesis Testing"
+author: "Raghuveer Venkatesh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+## Initial Setup and loading the Data
+# Loading library and reading the data set
+
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(glue)
+library(scales)
+library(pwr)
+library(pwrss)
+# Set working directory as the path to the data set
+setwd("C:/Users/raghu/OneDrive/Documents/Statistics_with_R/Week 2 Data Dive")
+
+# Read the data set
+data <- read_csv("fifa_players.csv")
+# Inspecting the column
+spec(data)
+```
+
+# Introduction
+
+In this analysis, we will explore FIFA player data to test two hypotheses. First, we'll examine whether there's a difference in the mean overall_rating between players with different preferred_foot (left vs. right)?. For the second hypothesis, we'll assess whether there is a difference in overall ratings between players from different nationalities?
+
+
+## Hypothesis 1 (Neyman-Pearson Framework):
+Is there a difference in the mean overall_rating between players with different preferred_foot (left vs. right)?
+
+## Null Hypothesis (H₀):
+There is no significant difference in the mean overall_rating between left-footed and right-footed players.
+
+## Alternative Hypothesis (H₁):
+There is a significant difference in the mean overall_rating between left-footed and right-footed players.
+
+## Checking descriptive statistics
+
+```{r}
+
+# Descriptive statistics for finishing ability by preferred foot
+summary_stats <- data |>
+  group_by(preferred_foot) |>
+  summarize(
+    mean_finishing = mean(finishing, na.rm = TRUE),
+    sd_finishing = sd(finishing, na.rm = TRUE),
+    n = n()
+  )
+
+print(summary_stats)
+
+
+```
+
+Average Finishing Ability: Left-footed players have a higher average finishing ability score (46.97) compared to right-footed players (44.87). This suggests that, on average, left-footed players may have a slight edge in finishing ability based on the data you have analyzed.
+
+### Significance Level (Alpha, α)
+We choose a significance level of 0.05. This means we are willing to accept a 5% chance of rejecting the null hypothesis when it is actually true (Type I error).
+
+### Power Level:
+We aim for a power of 0.8, meaning we have an 80% chance of correctly rejecting the null hypothesis if there is indeed a significant effect (Type II error of 20%).
+
+### Calculating Effect Size: Cohen-D
+```{r}
+# Filter data for left and right footed players
+left_footed <- data$finishing[data$preferred_foot == "Left"]
+right_footed <- data$finishing[data$preferred_foot == "Right"]
+
+# Calculate means
+mean_left <- mean(left_footed)
+mean_right <- mean(right_footed)
+
+# Calculate standard deviations
+sd_left <- sd(left_footed)
+sd_right <- sd(right_footed)
+
+# Calculate sample sizes
+n_left <- length(left_footed)
+n_right <- length(right_footed)
+
+# Calculate pooled standard deviation
+s_pooled <- sqrt(((n_left - 1) * sd_left^2 + (n_right - 1) * sd_right^2) / (n_left + n_right - 2))
+
+# Calculate Cohen's d
+cohen_d <- (mean_left - mean_right) / s_pooled
+cat("Calculated effect size is: ", cohen_d)
+
+```
+
+This suggests that there is a small difference in finishing ability between left-footed and right-footed players
+
+### Sample size calculation
+#### Effect size d = 0.1073, alpha = 0.05, power = 0.8
+
+```{r}
+sample_size <- pwr.t.test(d = 0.5, sig.level = 0.05, power = 0.8, type = "two.sample")
+sample_size
+```
+
+### Conclusion
+This output tells us that we need approximately 64 players per group with 80% power at a 0.05 significance level.
+
+### Testing the Hypothesis
+# Perform two-sample t-test
+```{r}
+
+
+# Define parameters based on your analysis
+mu1 <- 46.97340  # Mean finishing ability of left-footed players
+sd1 <- 17.52159  # SD of finishing ability of left-footed players
+n_left <- 4173   # Sample size of left-footed players
+n_right <- 13781 # Sample size of right-footed players
+
+# Calculate kappa (ratio of sample sizes) - Because sample sizes are unequal
+kappa <- n_left / n_right
+
+# Perform the power analysis for the hypothesis test
+test <- pwrss.t.2means(mu1 = mu1,
+                        sd1 = sd1,
+                        kappa = kappa,
+                        power = 0.8,
+                        alpha = 0.1,
+                        alternative = "not equal")
+
+# Print the results
+print(test)
+
+# Plot the results
+plot(test)
+```
+### Interpretation of results
+
+1. Sample size  n = 63.76561
+  This output tells us that we need approximately 64 players per group with 80% power at a 0.05 significance level.
+  
+2. The calculated Co-hen's d of 0.107 indicates a small effect size. This means that while the difference is statistically significant, it may not be large enough to warrant major changes in coaching or player development strategies
+
+3. Alpha = 0.1
+  Beta = 0.11 
+  
+Hypothesis tests revealed a small but statistically significant difference in finishing ability between left-footed and right-footed players. The significance level (alpha) was set to 0.1, indicating that you were willing to accept a 10% chance of incorrectly rejecting the null hypothesis (Type I error).
+
+With a desired power level (1 - beta) of 0.89, we set the acceptable Type II error rate (beta) to 0.11.
+
+The observed difference in means is 2.10423
+
+Overall, the small effect size suggests that any difference in training focus based on preferred foot may need to be carefully considered.
+
+## Fisher's Significance Testing
+
+## Hypothesis 2: Is there a difference in overall ratings between players from different nationalities?
+
+***Null Hypothesis:*** There is no association between a player's nationality and their overall rating category (high vs low).
+***Alternative Hypothesis:*** There is an association between a player's nationality and their overall rating category (high vs low).
+
+For this hypothesis, we will perform Fisher's exact test to evaluate the relationship between nationality and overall rating.
+
+## Fishers's exact test
+
+```{r}
+# List of main football countries
+main_countries <- c("Brazil", "Argentina", "Germany")
+
+# Filter the dataset for main football countries
+main_football_data <- data |>
+  filter(nationality %in% main_countries)
+
+
+# Categorize overall ratings into 'High' (>=70) and 'Low' (<70)
+main_football_data$rating_category <- ifelse(main_football_data$overall_rating >= 70, "High", "Low")
+
+# Create a contingency table between nationality and rating category
+contingency_table <- table(main_football_data$nationality, main_football_data$rating_category)
+
+# View the table to see the data distribution
+print(head(contingency_table))
+
+```
+## Perform Fisher's Exact Test
+
+```{r}
+# Increase the workspace and rerun Fisher's Exact Test
+fisher_test_result <- fisher.test(contingency_table, workspace = 2e8)  # Increase workspace size
+
+# View the result
+fisher_test_result
+```
+### Results
+
+P-Value: The p-value of 2.2e-16 is extremely small, indicating a very strong statistical significance.
+
+Because p-value is so small, you reject the null hypothesis. This means there is strong evidence to suggest that there are significant differences in overall ratings among players from different nationalities.
+
+### Visualisation
+
+Since there are too many nationality, we take the top 5 by average rating
+
+```{r}
+# Create a bar plot showing the distribution of rating categories by nationality
+ggplot(main_football_data, aes(x = nationality, fill = rating_category)) +
+  geom_bar(position = "fill") +
+  labs(title = "Distribution of Overall Ratings by Nationality",
+       x = "Nationality", y = "Proportion",
+       fill = "Rating Category") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_fill_manual(values = c("High" = "darkgreen", "Low" = "red"))
+```
+
+## Further questions
+
+1. Which specific nationalities show the most significant differences in overall ratings? Are there patterns in performance based on geography or cultural factors?
+
+2. Are there other player attributes (like age, height, or position) that correlate with overall ratings? How do these factors interact with nationality in influencing player performance?
+
+
+
+#### THE END

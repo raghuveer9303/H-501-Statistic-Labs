@@ -1,0 +1,301 @@
+---
+title: "Week-9-Data-Dive-Diagnosing-Regression-Models"
+author: "Raghuveer Venkatesh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+## Initial Setup and loading the Data
+# Loading library and reading the data set
+library(tidyverse)
+library(ggthemes)
+library(ggrepel)
+library(boot)
+library(broom)
+library(lindia)
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(glue)
+library(scales)
+library(car)
+# Set working directory as the path to the data set
+setwd("C:/Users/raghu/OneDrive/Documents/Statistics_with_R/Week 2 Data Dive")
+
+# Read the data set
+player_data <- read_csv("fifa_players.csv")
+# Inspecting the column
+spec(player_data)
+```
+
+```{r, include=FALSE}
+unique_positions <- unique(player_data$positions)
+
+# Define the position mapping
+position_mapping <- list(
+  "Attackers" = c("CF", "ST", "RW", "LW", "CAM", "RM", "LM"),
+  "Midfielders" = c("CM", "CDM", "CAM", "RM", "LM"),
+  "Defenders" = c("CB", "RB", "LB", "RWB", "LWB"),
+  "Goalkeepers" = c("GK")
+)
+
+# Create a function to classify positions
+classify_position <- function(position) {
+  for (category in names(position_mapping)) {
+    if (position %in% position_mapping[[category]]) {
+      return(category)
+    }
+  }
+  return(NA)  # Return NA if position doesn't match
+}
+
+# Split positions and add the first category as a new column to the original dataset
+player_data <- player_data |>
+  # Split positions that contain commas into separate rows
+  separate_rows(positions, sep = ",") |>
+  # Trim whitespace from positions (if any)
+  mutate(positions = trimws(positions)) |>
+  # Classify the positions and keep only the first match
+  mutate(Category = sapply(positions, classify_position)) |>
+  # Group by player and take only the first position category
+  group_by(name) |>
+  mutate(Category = first(na.omit(Category))) |>
+  ungroup()  # Remove the grouping
+
+table(player_data$Category)
+
+```
+
+```{r include=FALSE}
+
+# Fit the linear regression model using player potential to predict player value
+model1 <- lm(value_euro ~ potential, data = player_data)
+
+# Summarize the linear regression model
+model1$r.squared <- summary(model1)$r.squared
+model1$adj.r.squared <- summary(model1)$adj.r.squared
+
+
+```
+
+
+# Introduction
+
+The goal of this week’s data dive is to deepen our understanding of interpreting and diagnosing regression models, moving beyond basic predictive results to critically evaluating model assumptions and identifying potential issues. We’ll build on the simple linear regression model developed last week, enhancing it by incorporating 1-3 additional variables. Through this exercise, we aim to recognize how adding variables—including interaction and binary terms—impacts model performance, structure, and the relationships between predictors.
+
+Each variable added will be carefully selected, and for each choice, I will discuss the rationale and any potential multi-collinearity concerns. The final model will contain 2-4 terms, optimized for interpret ability and reliability. 
+
+Following the model construction, I will evaluate it using the five primary diagnostic plots discussed in class. Each diagnostic plot will be examined for indications of assumption violations, and if issues are identified, I will measure their severity and determine our confidence in the model assumptions.
+
+Finally, for each of the above tasks, I will share insights gained, their significance, and highlight any questions that arise during the analysis, providing a roadmap for further investigation. This structured approach will help ensure a comprehensive understanding of regression model diagnostics and lay a strong foundation for more advanced statistical modeling in the future.
+
+# Identifying Additional Variables
+
+## Overall Rating (overall_rating):
+
+This variable measures the player's current performance and is expected to be a strong predictor of the market value. Since potential captures future performance while overall rating measure current ability,  adding this variable could provide a more balanced view of value influences.
+
+### Building the regression model
+
+```{r}
+# Enhanced regression model with added predictors and interaction term
+model2 <- lm(value_euro ~ potential + overall_rating, data = player_data)
+
+# Summarize the enhanced model
+model2$r.squared <- summary(model2)$r.squared
+model2$adj.r.squared <- summary(model2)$adj.r.squared
+
+```
+
+## Interaction Term (Potential * Age):
+
+Including potential:age accounts for any differing impact of potential based on Age. For example, high potential might matter more for younger players, as they more time to reach their potential whereas for older players, high potential might not boost value much
+
+### Building the regression model
+
+```{r}
+# Enhanced regression model with added predictors and interaction term
+model3 <- lm(value_euro ~ potential + overall_rating + age + potential:age, data = player_data)
+
+# Summarize the enhanced model
+summary(model3)
+
+model3$r.squared <- summary(model3)$r.squared
+model3$adj.r.squared <- summary(model3)$adj.r.squared
+
+```
+
+## Wage (wage):
+
+Players earning higher wages are often viewed as more valuable. Including wage might help explain additional variance in value_euro, but it's worth noting that this variable might be correlated with both potential and overall rating, so checking multi-collinearity will be essential.
+
+
+# Check for Multicollinearity
+
+```{r}
+library(car)
+vif(model3)
+```
+# Plotting the change in R-squared value after adding the other two variables
+
+```{r}
+df_plot <- data.frame(
+  p = c(2, 3, 4),  # Number of predictors in each model
+  r_squared = c(model1$r.squared, model2$r.squared, model3$r.squared),
+  adj_r_squared = c(model1$adj.r.squared, model2$adj.r.squared, model3$adj.r.squared)
+) |> 
+  mutate(
+    r_perc_increase = 100 * round((r_squared - model1$r.squared) / model1$r.squared, 3),
+    r_adj_perc_increase = 100 * round((adj_r_squared - model1$adj.r.squared) / model1$adj.r.squared, 3),
+    diff = r_perc_increase - r_adj_perc_increase
+  )
+
+ggplot(data = df_plot) +
+  geom_line(mapping = aes(x = p, y = r_perc_increase, color = 'R Squared Improvement')) +
+  geom_line(mapping = aes(x = p, y = r_adj_perc_increase, color = 'Adjusted R Squared Improvement')) +
+  geom_text_repel(mapping = aes(x = p, y = r_adj_perc_increase, 
+                                label = paste("diff =", round(diff, 1))),
+                  color = "darkred", nudge_x = 0.3) +
+  labs(color = '', 
+       x = 'Number of Variables (p)',
+       y = '% Increase in R-Squared',
+       title = "Improving on a Model with 2 Coefficients",
+       subtitle = "(Initial Model: R=0.4 and R_adj=0.399)") +
+  scale_color_brewer(palette = 'Dark2') +
+  theme(legend.position = "bottom")
+```
+
+# Diagnostic plots for evaluating the model
+
+-   Residuals vs. $\hat{y}$ values
+-   Residuals vs. $x$ values
+-   Residual Histogram
+-   QQ-Plot
+-   Cook's D by Observation\*
+
+## Residuals vs $\hat{y}$ values
+
+```{r}
+
+# Fit the model
+model3 <- lm(value_euro ~ potential + overall_rating + age + potential:age, data = player_data)
+
+# Calculate fitted values and residuals
+fitted_values <- model3$fitted.values
+residuals <- model3$residuals
+
+# Plot Residuals vs Fitted Values
+plot(fitted_values, residuals, 
+     xlab = "Fitted Values (hat{y})", 
+     ylab = "Residuals", 
+     main = "Residuals vs. Fitted Values")
+abline(h = 0, col = "red")  # Horizontal line at 0
+
+
+```
+### Interpretation
+
+The curved pattern in residuals suggests the model doesn’t fully capture the relationship, indicating possible non-linearity. Additionally, the increasing spread of residuals shows heteroscedasticity, meaning the model's errors vary with fitted values.
+
+
+## Residuals vs X-values
+
+```{r}
+
+# Extract the data used in the model
+model_data <- model.frame(model3)
+
+# Extract residuals and add them to model_data
+plot_data <- data.frame(
+  potential = model_data$potential,
+  overall_rating = model_data$overall_rating,
+  age = model_data$age,
+  residuals = residuals(model3)
+)
+
+# Residuals vs. Potential
+ggplot(plot_data, aes(x = potential, y = residuals)) +
+  geom_point() +
+  geom_smooth(se = FALSE, color = "blue") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Residuals vs. Potential", x = "Potential", y = "Residuals")
+
+# Residuals vs. Overall Rating
+ggplot(plot_data, aes(x = overall_rating, y = residuals)) +
+  geom_point() +
+  geom_smooth(se = FALSE, color = "blue") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Residuals vs. Overall Rating", x = "Overall Rating", y = "Residuals")
+
+# Residuals vs. Age
+ggplot(plot_data, aes(x = age, y = residuals)) +
+  geom_point() +
+  geom_smooth(se = FALSE, color = "blue") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Residuals vs. Age", x = "Age", y = "Residuals")
+
+```
+
+### Interpretation
+
+Only Age exhibits linearity with the residuals, the other variables like overall rating and potential don't exhibit this especially at higher values. So we would have to investigate the higher data points like Potential > 80 and Overall rating > 80 to check if there are any other factors influencing the same.
+
+## Residual Histogram
+
+```{r}
+
+# Histogram of Residuals
+hist(residuals, breaks = 30, 
+     main = "Histogram of Residuals", 
+     xlab = "Residuals", 
+     col = "lightblue")
+
+
+
+```
+### Interpretation
+
+There is a shorter tail on the left compared to the right where we want to see a normal distribution which indicates that we may need different variables and we are missing some phenomenon which is causing this skew.
+
+## QQ-Plot
+
+```{r}
+# QQ-Plot
+qqnorm(residuals)
+qqline(residuals, col = "red")
+
+
+```
+
+### Interpretation
+
+Towards the tail end of the Q-Q Plot the distribution is not normal for the residuals and there is a very heavy positive skew. This indicates the presence of large positive outliers which are impacting the model's assumption and fit.
+
+
+## Cooks'D by Observation
+
+```{r}
+
+gg_cooksd(model3, threshold = 'matlab')
+
+```
+### Observation
+
+A few observations like those at 8197, 29000+ stand out with high Cook's distance suggesting that they are disproportionately affecting the model. These points should be investigated individually as they may be outliers and removed which could improve model stability and accuracy.
+
+
+# Conclusion
+
+Model 3 explains around 48% of the variability in player value, suggesting moderate predictive power. Diagnostic plots show mostly random residual patterns, supporting model assumptions, though some influential points were identified by Cook's distance. The interaction between potential and age appears meaningful, indicating age affects the impact of potential on value. Overall, this model is a reasonable fit but may benefit from additional predictors.
+
+
+
+
+
+
+##### THE END

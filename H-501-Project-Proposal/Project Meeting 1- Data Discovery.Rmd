@@ -1,0 +1,105 @@
+---
+title: 'Project Meeting 1: Data Discovery'
+author: "Raghuveer Venkatesh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Summary
+
+This dataset contains detailed information on approximately 17,000 football players from the SoFIFA.com platform. It covers a wide range of attributes related to players, such as demographic details, performance metrics, market values, and ratings for various skills and abilities.
+
+## Link to dataset
+
+https://www.kaggle.com/datasets/maso0dahmed/football-players-data 
+https://sofifa.com/ 
+
+## Main project goal
+The primary goal of this project is to build a regression model to predict a football player’s market value based on various attributes, helping to better understand the factors that drive player performance, market value, and career potential.
+
+Specifically, the project aims to:
+
+Identify key factors that influence a player's market value and wage in the football industry (e.g., potential, rating, position).
+
+Evaluate the impact of physical traits such as height, stamina, and strength on a player’s overall rating and performance.
+
+Analyze the effect of age on a player's performance over time, identifying peak performance years and typical periods of decline.
+
+This model will help provide insights into the most significant predictors of player value and help stakeholders make informed decisions.
+
+
+## Plan moving forward.
+1. Data cleaning and data prep.
+2. Identify any anomalies in the data set.
+3. Exploratory data analysis - Correlation analysis, outlier detection etc.,
+4. Visualization of key relationships and aggregation of data.
+5. Interpretation of results.
+6. Develop a dashboard to display this results 
+7. Prepare a final report.
+
+# Initial findings
+
+1. Does higher overall rating lead to higher market value or is any other factor driving this ?
+
+2. Are players with high dribbling, sprint speed and stamina play are more likely to play as attacker ?
+
+## Preparing Visualisations
+
+```{r}
+# Set working directory as the path to the data set
+setwd("C:/Users/raghu/OneDrive/Documents/Statistics_with_R/Week 2 Data Dive")
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(corrplot)
+library(glue)
+library(scales)
+# Read the data set
+player_data <- read_csv("fifa_players.csv")
+spec(player_data)
+
+```
+### Hypothesis 1:
+
+#### Higher overall rating and potential lead to a higher market value.
+
+
+####Visualization:
+
+```{r}
+# Scatter plot for Overall Rating vs Market Value
+ggplot(player_data, aes(x = overall_rating, y = value_euro)) +
+  geom_point(alpha = 0.5, color = "blue") +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  # Adds linear trend line
+  labs(title = "Overall Rating vs Market Value", x = "Overall Rating", y = "Market Value (Euro)") +
+  theme_minimal()
+
+```
+### Interpretation:
+1. The scatter plot shows an upward trend, we can infer that players with higher overall ratings tend to have higher market values.
+2. There isn't a very strong positive slope so we can infer that there are other factors influencing overall rating.
+
+
+### Hypothesis 2:
+#### Physical traits such as height, stamina, and strength positively influence market value.
+
+#### Visualisation:
+
+```{r}
+# Select numeric columns related to physical traits and market value
+numeric_cols <- player_data |> select(value_euro, height_cm, stamina, strength)
+
+# Compute correlation matrix
+cor_matrix <- cor(numeric_cols, use = "complete.obs")
+
+# Plot heatmap using corrplot with correlation values in the boxes
+corrplot(cor_matrix, method = "color", type = "upper", 
+         tl.col = "black", tl.srt = 45, addCoef.col = "black")  # Adds correlation values in boxes
+
+```
+
+### Interpretation
+
+1. The heat map will show the correlation coefficients between market value and physical attributes like height, stamina, and strength.
+2. Only stamina has a weak correlation to value in euro other than that no other physical traits are influencing player value.

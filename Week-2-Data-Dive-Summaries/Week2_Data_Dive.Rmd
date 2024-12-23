@@ -1,0 +1,213 @@
+---
+title: "Week2 - Data Dive Summaries"
+author: "Raghuveer Venkatesh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Introduction
+
+Welcome to our exploration of FIFA Players Data. In this notebook, we’re diving into the world of football players to uncover some interesting insights about their attributes and how they stack up against each other.
+
+# Here’s what we’ll be looking at:
+
+Getting to Know the Data: We’ll start by summarizing the basics—like the ages, heights, and overall ratings of the players. We’ll also check out how players are distributed across different nationalities. Finally, we will visualize how a player's physical attributes change by age and how their wages are related to their overall rating.
+
+**Foot Preferences and Ratings:** Ever wondered if a player’s preferred foot (left or right) affects their performance? We’ll explore whether there’s a noticeable difference in average ratings between players who favor their left foot versus their right.
+
+**Top Footballing Nations:** We’ll identify which countries have the most players in the dataset. This will give us a snapshot of which nations are most represented in the world of football.
+
+**Player Count vs. Performance:** Finally, we’ll investigate if there’s a pattern between the number of players from a country and their average ratings. Do countries with more players tend to have higher ratings?
+
+**Visualization: Physical attributes vs Age:** Ever wondered how a Player's physical attributes change by age ?
+
+**Visualization: Player earning vs Overall rating:** How does a Football Player's earning depend on their overall rating ?
+
+```{r setup, include=FALSE}
+## Initial Setup and loading the Data
+# Loading library and reading the data set
+
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(glue)
+# Set working directory as the path to the data set
+setwd("C:/Users/raghu/OneDrive/Documents/Statistics_with_R/Week 2 Data Dive")
+
+# Read the data set
+Fifa_Players_Data <- read_csv("fifa_players.csv")
+# Inspecting the column
+spec(Fifa_Players_Data)
+```
+
+# Summarising the numeric columns - age, height, overall rating for the players
+
+```{r}
+# For numeric columns
+numeric_summary <- Fifa_Players_Data |>
+  summarise(
+    age_min = min(age, na.rm = TRUE),
+    age_max = max(age, na.rm = TRUE),
+    age_mean = mean(age, na.rm = TRUE),
+    age_median = median(age, na.rm = TRUE),
+    age_25th = quantile(age, 0.25, na.rm = TRUE),
+    age_75th = quantile(age, 0.75, na.rm = TRUE),
+    height_min = min(height_cm, na.rm = TRUE),
+    height_max = max(height_cm, na.rm = TRUE),
+    height_mean = mean(height_cm, na.rm = TRUE),
+    height_median = median(height_cm, na.rm = TRUE),
+    height_25th = quantile(height_cm, 0.25, na.rm = TRUE),
+    height_75th = quantile(height_cm, 0.75, na.rm = TRUE),
+    overall_rating_min = min(overall_rating, na.rm = TRUE),
+    overall_rating_max = max(overall_rating, na.rm = TRUE),
+    overall_rating_mean = mean(overall_rating, na.rm = TRUE),
+    overall_rating_median = median(overall_rating, na.rm = TRUE),
+    overall_rating_25th = quantile(overall_rating, 0.25, na.rm = TRUE),
+    overall_rating_75th = quantile(overall_rating, 0.75, na.rm = TRUE)
+  )
+
+#For Category Columns - Nationality
+nationality_counts <- Fifa_Players_Data |>
+  count(nationality) |>
+  rename(Category = nationality, Count = n) |>
+  mutate(Column = "nationality")
+
+# Combine the data frames into a single summary table
+summary_table <- bind_rows(nationality_counts)
+
+# Arrange the summary table by Column and Category for better readability
+summary_table <- summary_table |>
+  arrange(Column, desc(Count))
+```
+
+## Numeric Summary
+
+```{r}
+print(numeric_summary)
+```
+
+### Observations
+
+The summary statistics for the data show that the minimum age is 16, the maximum age is 40, and the median age is 25. The average height is 175.26 cm, with a minimum height of 154 cm and a maximum height of 205 cm. The overall rating ranges from 3 to 94, with a median of 67.
+
+## Printing Categorical Summary
+
+```{r}
+print(summary_table)
+
+```
+
+### Observations
+
+The top 10 nationalities in the dataset are dominated by England, with the highest number of players at 1,658, followed by Germany and Spain. Although there's a significant drop after the top three, countries like the Netherlands still contribute notable numbers of players. Overall, these figures highlight England's prominent presence in the dataset, while showing diverse representation from other major footballing nations.
+
+## **Some novel questions and answers from the dataset:**
+
+### Question 1: What is the average overall rating of players based on their preferred foot?
+
+```{r}
+  average_rating_by_foot <- Fifa_Players_Data |>
+    group_by(preferred_foot) |>
+    summarise(average_overall_rating = mean(overall_rating, na.rm = TRUE)) |>
+    arrange(desc(average_overall_rating))
+  
+  print(average_rating_by_foot)
+```
+
+### Observations and Conclusion
+
+This small difference suggests that a player's preferred foot has a negligible impact on their average overall rating.
+
+### Question 2: Which are the top 10 nations with the highest representation in FIFA?
+
+```{r}
+#Compute top 10 nations
+top_10_nations <- nationality_counts |>
+  arrange(desc(Count)) |>
+  head(10)
+
+print(top_10_nations)
+  
+```
+
+### Observations and Conclusion
+
+1.  England has the highest representation with 1,658 players, significantly leading over the other nationalities.
+2.  The representation decreases gradually from England to the Netherlands, with the Netherlands having the lowest count among the top 10 at 441 players.
+
+### Question 3: Do Nationalities with Higher Player Counts Have Higher Average Ratings?
+
+```{r}
+avg_rating_by_nationality <- Fifa_Players_Data |>
+  group_by(nationality) |>
+  summarise(
+    player_count = n(),
+    avg_rating = mean(overall_rating, na.rm = TRUE)
+  ) |>
+  arrange(desc(player_count))
+
+print(avg_rating_by_nationality)
+
+```
+
+### Observations and Conclusion
+
+Brazil stands out with the highest average rating of 71.05. Despite having fewer players compared to some other nations, Brazilian players tend to perform better on average. This suggests Brazil's footballers are among the best in this data set.
+
+# **Visualisations**
+
+# Let's understand how a Player's Physical Attributes change by Age
+
+```{r}
+# Assuming your data is in a data frame named "player_data"
+player_data_summary <- Fifa_Players_Data |>
+  filter(age <= 45) |>
+  group_by(age) |>
+  summarize(
+    mean_acceleration = mean(acceleration),
+    mean_sprint_speed = mean(sprint_speed),
+    mean_stamina = mean(stamina),
+    mean_strength = mean(strength)
+  )
+
+ggplot(player_data_summary, aes(x = age)) +
+  geom_line(aes(y = mean_acceleration, color = "Acceleration"), linetype = 1, size = 0.8) +
+  geom_line(aes(y = mean_sprint_speed, color = "Sprint Speed"), linetype = 2, size = 0.8) +
+  geom_line(aes(y = mean_stamina, color = "Stamina"), linetype = 3, size = 0.8) +
+  geom_line(aes(y = mean_strength, color = "Strength"), linetype = 4, size = 0.8) +
+  labs(
+    title = "Range of Physical Attributes by Age",
+    x = "Age",
+    y = "Mean Yearly Change in Rating"
+  ) +
+  scale_color_manual(values = c("Acceleration" = "#000000", "Sprint Speed" = "#FF0000", "Stamina" = "#008000", "Strength" = "#FFA500")) +
+  theme_minimal()
+```
+
+# Observations and Conclusion
+
+As football players get older, their speed and agility naturally decline. While they might gain some muscle mass and strength, they often find it harder to keep up with younger players. This is especially true for skills like acceleration and sprint speed, which are crucial for attacking players.
+
+# Understanding how Player's wage relates to their Overall Rating
+
+```{r}
+ggplot(Fifa_Players_Data, aes(x = overall_rating, y = wage_euro)) +
+  geom_point(data = Fifa_Players_Data %>%
+             filter(!is.na(wage_euro) & !is.infinite(wage_euro)),
+             alpha = 0.5) +
+  geom_smooth(formula = 'y ~ x',
+             data = Fifa_Players_Data %>%
+             filter(!is.na(wage_euro) & !is.infinite(wage_euro)),
+             method = "lm", se = FALSE, color = "red") +
+  labs(title = "Wage vs. Overall Rating",
+       x = "Overall Rating",
+       y = "Wage (EUR)") +
+  scale_y_continuous(labels = scales::comma)
+```
+
+# Observations and Conclusion
+
+Overall rating is a strong predictor of wage, but other factors like age, potential, and nationality also influence player performance and earnings.
+
+###### THE END

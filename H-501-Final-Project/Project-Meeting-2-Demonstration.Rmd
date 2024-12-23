@@ -1,0 +1,672 @@
+---
+title: "Project-Meeting-2-Demonstration"
+author: "Raghuveer Venkatesh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Set working directory as the path to the data set
+setwd("C:/Users/raghu/OneDrive/Documents/Statistics_with_R/Week 2 Data Dive")
+library(tidyverse)
+library(readr)
+library(knitr)
+library(dplyr)
+library(lubridate)
+library(corrplot)
+library(glue)
+library(ggcorrplot)
+library(scales)
+library(gt)
+library(patchwork)
+library(pwrss)
+library(pwr)
+library(car)
+# Read the data set
+fifa_data_raw <- read_csv("fifa_players.csv")
+spec(fifa_data_raw)
+
+fifa_data <- read_csv("fifa_players.csv", col_types = cols(
+  age = col_double(),
+  height_cm = col_double(),
+  weight_kgs = col_double(),
+  overall_rating = col_double(),
+  potential = col_double(),
+  value_euro = col_double(),
+  wage_euro = col_double(),
+  `international_reputation(1-5)` = col_double(),
+  `weak_foot(1-5)` = col_double(),
+  `skill_moves(1-5)` = col_double(),
+  stamina = col_double(),
+  strength = col_double(),
+  dribbling = col_double(),
+  vision = col_double(),
+  finishing = col_double(),
+  shot_power = col_double(),
+  penalties = col_double(),
+  heading_accuracy = col_double(),
+  volleys = col_double(),
+  `skill_moves(1-5)` = col_double(),
+))
+
+spec(fifa_data)
+
+```
+
+## Main Project Goal
+
+The main objective of this project is to create a regression model that can accurately predict a FIFA football strikers market value. This is done by diving deep into various attributes like performance metrics, physical traits, and Player stats - age, height, weight. This analysis aims to uncover the factors that truly drive a player's worth in the transfer market.
+
+This will give Clubs and Agents the clarity they need to make smarter, more informed decisions. It can pinpoint undervalued talent, justify big-money investments, or even identify traits that consistently lead to higher market valuations.
+
+Specifically for the team's manager, this could mean having a competitive edge during negotiations. For the scouting team, it’s about finding hidden gems that others might overlook. Finance teams get clarity on the ROI of expensive signings, while the coaching staff gains insights into which traits best align with the team’s style of play.
+
+**There are no missing values or null values on any of the columns so we have very clean data to begin with**
+
+```{r}
+fifa_data <- fifa_data |>
+  mutate(
+    first_position = str_extract(positions, "^[^,]+") 
+  )
+
+fifa_data <- fifa_data |>
+  mutate(
+    position_category = case_when(
+      first_position %in% c("ST", "RW", "LW", "CF") ~ "Attacker",
+      first_position %in% c("CAM", "CM", "LM", "RM", "CDM") ~ "Midfielder",
+      first_position %in% c("CB", "LB", "RB", "LWB", "RWB") ~ "Defender",
+      first_position == "GK" ~ "Goalkeeper",
+      TRUE ~ "Unknown"
+    )
+  )
+
+
+fifa_data |> count(position_category) |>
+  arrange(desc(n)) |>
+  ggplot(aes(x = reorder(position_category, -n), y=n)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  theme_minimal() +
+  labs(title = "Frequency of Player Positions", x = "Position", y = "Count")
+
+
+```
+
+**Observations** We get to see the distribution of talent pool of attackers and we could see that there are approx \~3750 attackers.
+
+```{r}
+# Filtering for only Attackers 
+
+fifa_data <-  filter(fifa_data, position_category == "Attacker")
+
+```
+
+***Let's start off by looking at some key attributes of our population to understand a bit about the data using some summary statistics***
+
+```{r}
+# Summarize the data
+summary_table <- fifa_data |>
+  select(age, height_cm, weight_kgs) |>
+  summary()
+
+print(summary_table)
+
+fifa_data |> 
+  select(overall_rating, potential, value_euro, wage_euro) |>
+  pivot_longer(everything(), names_to = "Variable", values_to = "Value") |>
+  ggplot(aes(x = Value)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "black") +
+  facet_wrap(~Variable, scales = "free") +
+  theme_minimal() +
+  labs(title = "Univariate Analysis: Histograms")
+
+
+```
+
+**Summary Statistics** - Mean age: 25.12 years - Total age range: 17-40 years
+
+Physical attributes - Median height is 175.3 cm - Median weight is 74.8 kg
+
+**As we have a lot of traits, let's pick out the specific traits which are important to us**
+
+We start off by picking the top Physical traits and traits specific to football like finishing, dribbling, stamina, strength etc.., to address our issue. This is done by creating a correlation matrix of the attributes.
+
+### Correlation Matrix
+
+```{r}
+key_attributes <- fifa_data |>
+  select(wage_euro,overall_rating, value_euro, potential, `skill_moves(1-5)`, `international_reputation(1-5)`)
+
+# Compute the correlation matrix
+cor_matrix_key <- cor(key_attributes, use = "complete.obs")
+
+ggcorrplot(cor_matrix_key, 
+           method = "circle", 
+           type = "lower", 
+           lab = TRUE, 
+           title = "Correlation: Overall Rating vs Key Attributes",
+           colors = c("blue", "white", "red"))
+
+```
+
+**Observation**: Overall rating, wage and international reputation have the highest correlation to the value in euro for a particular player.
+
+```{r}
+physical_traits <- fifa_data |>
+  select(overall_rating, stamina, strength, vision, sprint_speed, shot_power, agility)
+
+# Compute the correlation matrix
+cor_matrix_physical <- cor(physical_traits, use = "complete.obs")
+
+ggcorrplot(cor_matrix_physical, 
+           method = "circle", 
+           type = "lower", 
+           lab = TRUE, 
+           title = "Correlation: Physical Traits",
+           colors = c("blue", "white", "red"))
+
+```
+
+**Observation**: Stamina, Vision and Shot power most impactful attributes to the overall rating of a particular player which based on the previous matrix strongly determines the value of the particular player in the international transfer market.
+
+```{r}
+
+football_traits <- fifa_data |>
+  select(overall_rating, finishing, dribbling, composure, reactions, positioning, 
+         long_shots, ball_control, curve, volleys, heading_accuracy)
+
+# Compute the correlation matrix
+cor_matrix_football <- cor(football_traits, use = "complete.obs")
+
+ggcorrplot(cor_matrix_football, 
+           method = "circle", 
+           type = "lower", 
+           lab = TRUE, 
+           title = "Correlation: Football Traits",
+           colors = c("blue", "white", "red"))
+
+```
+
+**Observations** finishing, dribbling, composure, reactions, positioning, long shots, ball control and volleys have the highest correlation to the overall rating Based on these observations, we can pick the traits below for further analysis which show a high correlation towards the overall rating.
+
+**Football traits**: finishing, dribbling, composure, reactions, positioning, long_shots, ball_control, volleys. **Physical traits**: shot power, vision, stamina
+
+# Exploratory Data Analysis
+
+### Uni-variate ANalysis: Descriptive Analysis of the values - Football and Physical traits to find the rare traits and commond traits
+
+```{r}
+summary_data <- fifa_data |> 
+  select(stamina, dribbling, finishing, vision, shot_power, composure, reactions, positioning, long_shots, ball_control, volleys) |> 
+  summarise_all(list(mean = mean, median = median, sd = sd, min = min, max = max), na.rm = TRUE)
+
+# Reshaping the data to long format for ggplot2
+summary_long <- summary_data |>
+  pivot_longer(cols = everything(),
+               names_to = c("variable", "statistic"),
+               names_pattern = "(.*)_(.*)",
+               values_to = "value")
+
+# Plotting the summary statistics for all variables
+ggplot(summary_long, aes(x = variable, y = value, fill = statistic)) +
+  geom_hline(yintercept = 65, color = "black", size = 1, linetype = "dashed") +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Summary Statistics for FIFA Data (All Variables)",
+       x = "Variable",
+       y = "Value") +
+  scale_fill_manual(values = c("mean" = "blue", "median" = "green", "sd" = "orange", "min" = "red", "max" = "purple")) +
+  theme_minimal() +
+   theme(axis.text.x = element_text(
+    angle = 45, hjust = 1,
+  )) +
+  theme(legend.title = element_blank()) 
+
+```
+
+#### Observations
+
+**Common Traits**
+
+-   Ball Control - Dribbling - Finishing - Positioning - Shot Power, Stamina
+
+**Rarer Traits**
+
+-   Composure - Long Shots - Reactions - Vision - Volleys
+
+### Bi-variate Analysis
+
+Scatter plot: Market Value vs Overall rating
+
+```{r}
+fifa_data |>
+  ggplot(aes(x = overall_rating, y = value_euro)) +
+  geom_point(alpha = 0.6, color = "steelblue") +
+  theme_minimal() +
+  scale_y_log10(labels = dollar_format(prefix = "€")) +
+  labs(title = "Market Value vs Overall Rating", x = "Overall Rating", y = "Market Value")
+```
+
+#### Observations - Market values vs Overall rating
+
+We can see that the Market value increases exponentially when compared to overall rating
+
+**Scatter plot: Market Value vs Wage**
+
+```{r}
+fifa_data |>
+  ggplot(aes(y = overall_rating, x = wage_euro)) +
+  geom_point(alpha = 0.6, color = "steelblue") +
+  theme_minimal() +
+  scale_x_log10(labels = dollar_format(prefix = "€")) +
+  labs(title = "Player Wage vs Overall Rating", x = "Overall Rating", y = "Market Value")
+
+```
+
+### Observations - Value vs Wage
+
+Strong link observed between Overall rating and Market value
+
+**International Reputation vs Wage**
+
+```{r}
+
+fifa_data |>
+  group_by(`international_reputation(1-5)`) |>
+  summarise(
+    avg_value_euro = mean(value_euro, na.rm = TRUE),
+    median_value_euro = median(value_euro, na.rm = TRUE),
+    count = n()
+  ) |>
+  arrange(desc(avg_value_euro))
+```
+
+## Observation
+
+Majority of our talent pool has a very low international reputation. Target international reputations would be 1 & 2.
+
+```{r}
+
+fifa_data |>
+  ggplot(aes(x = factor(`international_reputation(1-5)`), y = value_euro)) +
+  geom_boxplot(outlier.color = "red", outlier.shape = 16, fill = "steelblue") +
+  theme_minimal() +
+  scale_y_continuous(labels = dollar_format(prefix = "€"))
+  labs(
+    title = "Distribution of Player Value by International Reputation",
+    x = "International Reputation (1-5)",
+    y = "Player Value (Euro)"
+  )
+```
+
+### Observatinos - International reputation vs Value
+
+We could see that there is a linear increase with overlap between consecutive international reputation for the value.
+
+## Hypothesis Testing
+
+**Hypothesis 1** Null Hypothesis: Age does not affect players' market value Alternative Hypothesis: Age affects players' market value
+
+```{r}
+
+median_age <- median(fifa_data$age, na.rm = TRUE)
+young_players <- fifa_data$value_euro[fifa_data$age < median_age]
+older_players <- fifa_data$value_euro[fifa_data$age >= median_age]
+model_age <- lm(log(value_euro) ~ age, data = fifa_data)
+summary_model = summary(model_age)
+
+p_value <- coef(summary_model)["age", "Pr(>|t|)"]
+alpha <- 0.05
+
+if (p_value <= alpha) {
+  cat("Reject the null hypothesis: Age significantly affects players' market value.\n")
+} else {
+  cat("Fail to reject the null hypothesis: Age does not significantly affect players' market value.\n")
+}
+
+
+```
+
+## Performing a two sided t-test
+
+To test whether the average log-transformed market value for players of a certain age differs from a hypothetical value.
+
+```{r}
+
+fifa_data$age_group <- ifelse(fifa_data$age < median_age, "Young Players", "Older Players")
+
+t.test(value_euro ~ age_group, data = fifa_data, var.equal = FALSE)
+
+```
+
+```{r}
+
+filtered_data <- fifa_data |> 
+  filter(value_euro <= 5e6)
+
+# Violin plot
+ggplot(filtered_data, aes(x = age_group, y = value_euro, fill = age_group)) +
+  # Violin plot to show the distribution
+  
+  # Overlay boxplot for summary statistics
+  geom_boxplot(width = 0.2, alpha = 0.8, outlier.shape = NA) +
+  
+  # Scales for fill
+  scale_fill_manual(values = c("Young Players" = "#1E90FF", "Older Players" = "#FF6347")) +
+  scale_y_continuous(labels = dollar_format(prefix = "€")) +
+  
+  # Labels and theme
+  labs(
+    title = "Market Value Distribution by Age Group",
+    x = "Age Group",
+    y = "Market Value (Euro)",
+    fill = "Age Group"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none", # Optional: to reduce redundancy
+    plot.title = element_text(hjust = 0.5),
+    text = element_text(size = 12)
+  )
+```
+
+```{r}
+mu1 <- mean(young_players, na.rm = TRUE)
+sd1 <- sd(young_players, na.rm = TRUE) 
+
+# Perform the power analysis
+power_analysis <- pwr.t.test(
+  d = (mu1) / sd1,
+  power = 0.8, 
+  sig.level = 0.1, 
+  type = "two.sample", 
+  alternative = "two.sided"
+)
+
+# Plot the power analysis result
+plot(power_analysis)
+```
+
+**Hypothesis 2** Null Hypothesis: Potential doesn't affect a players' market value Alternative Hypothesis: Potential affects players' market value
+
+```{r}
+median_potential <- median(fifa_data$potential, na.rm = TRUE)
+
+fifa_data$potential_group <- ifelse(fifa_data$potential < median_potential, "Low Potential", "High Potential")
+
+
+fifa_data$log_value_euro <- fifa_data$value_euro
+
+t_test_result_potential <- t.test(log_value_euro ~ potential_group, data = fifa_data, var.equal = FALSE)
+
+print(t_test_result_potential)
+
+filtered_data <- fifa_data |> 
+  filter(value_euro <= 5e6)
+
+ggplot(filtered_data, aes(x = potential_group, y = log_value_euro, fill = potential_group)) +
+  
+  # Violin plot to show distribution
+  geom_violin(alpha = 0.5, color = "black") +
+  
+  # Overlay boxplot for summary statistics
+  geom_boxplot(width = 0.2, alpha = 0.8, outlier.shape = NA) +
+  
+  # Custom fill scale
+  scale_fill_manual(values = c("Low Potential" = "#FF6347", "High Potential" = "#1E90FF")) +
+  
+  # Adjust y-axis for euro formatting
+  scale_y_continuous(labels = scales::dollar_format(prefix = "€", big.mark = ",")) +
+  
+  # Add labels and theme
+  labs(
+    title = "Market Value Distribution by Potential Group",
+    x = "Potential Group",
+    y = "Market Value (Euro, Log Scale)",
+    fill = "Potential Group"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none", # Remove redundant legend
+    plot.title = element_text(hjust = 0.5),
+    text = element_text(size = 12)
+  )
+
+```
+
+```{r}
+median_potential <- median(fifa_data$potential, na.rm = TRUE)
+low_potential <- fifa_data$value_euro[fifa_data$potential < 75]
+high_potential <- fifa_data$value_euro[fifa_data$potential >= 75]
+
+mu1 <- mean(low_potential, na.rm = TRUE)
+sd1 <- sd(low_potential, na.rm = TRUE) 
+
+# Perform the power analysis
+power_analysis <- pwr.t.test(
+  d = (mu1) / sd1,
+  power = 0.8, 
+  sig.level = 0.1, 
+  type = "two.sample"
+)
+
+# Plot the power analysis result
+plot(power_analysis)
+
+
+```
+
+**Observations** We can see that the p-values for both potential and age are minuscule. Hence, we can safely reject the null hypothesis and can say that both age and potential are statistically significant and must be considered when creating the linear regression model.
+
+### Linear Regression Models
+
+\*\*Linear Regression Model of value ins euro based on age, potential and overall rating.
+
+```{r}
+# Create the linear regression model
+log_value_model <- lm(log(value_euro) ~ potential +  overall_rating + age + I(age^2), 
+                      data = fifa_data)
+
+fifa_data$predicted_value_plot <- exp(predict(log_value_model, fifa_data))
+
+
+summary(log_value_model)
+
+```
+
+```{r}
+
+plot_actual_vs_predicted_smooth <- function(predictor, data, actual, predicted) {
+  ggplot(data, aes_string(x = predictor)) +
+    geom_point(aes_string(y = actual), color = "blue", alpha = 0.5) +
+    geom_smooth(aes_string(x = predictor, y = predicted), 
+                method = "loess", 
+                color = "red", 
+                se = FALSE, 
+                linetype = "dashed", 
+                size = 1) +
+    labs(title = paste("Actual vs Predicted for", predictor),
+         x = predictor, y = "Value (Euro)") +
+    theme_minimal() +
+    scale_y_continuous(labels = scales::comma) +
+    theme(plot.title = element_text(size = 16),
+          axis.title = element_text(size = 14),
+          axis.text = element_text(size = 12))
+}
+
+plot_potential <- plot_actual_vs_predicted_smooth("potential", fifa_data, actual = "value_euro", predicted = "predicted_value_plot")
+plot_overall_rating <- plot_actual_vs_predicted_smooth("overall_rating", fifa_data, actual = "value_euro", predicted = "predicted_value_plot")
+
+print(plot_potential)
+```
+
+```{r}
+print(plot_overall_rating)
+
+```
+
+## Quadratic Model to fit the Age vs Overall rating to find the turning point
+
+```{r}
+model_age <- lm(log(value_euro) ~ age + I(age^2), data = fifa_data)
+
+age_seq <- seq(min(fifa_data$age), max(fifa_data$age), length.out = 1000)
+predicted_log_values <- predict(model_age, newdata = data.frame(age = age_seq))
+predicted_values <- exp(predicted_log_values)  # Convert back to Euros
+
+# Create a data frame for predictions
+predicted_data <- data.frame(age = age_seq, value_euro = predicted_values)
+
+# Calculate the turning point (peak age)
+coefficients <- coef(model_age)
+turning_point <- -coefficients["age"] / (2 * coefficients["I(age^2)"])
+peak_value <- exp(predict(model_age, newdata = data.frame(age = turning_point)))
+
+# Plot with ggplot2
+ggplot(data = fifa_data, aes(x = age, y = value_euro)) +
+  geom_point(color = "darkgreen") +  # Scatter plot for actual data
+  geom_line(data = predicted_data, aes(x = age, y = value_euro), color = "blue", size = 1) +  # Predicted curve
+  geom_vline(xintercept = turning_point, linetype = "dashed", color = "red") +  # Vertical line at the turning point
+  annotate("text", x = turning_point, y = peak_value, label = paste0("Peak: Age ", round(turning_point, 1), "\n€", format(round(peak_value, 2), big.mark = ",")), 
+           hjust = -0.1, vjust = -0.5, color = "black", size = 10, fontface = "bold") +  # Label at the turning point
+  labs(
+    title = "Age vs Value in Euros",
+    x = "Age",
+    y = "Value in Euros"
+  ) +
+  scale_y_continuous(labels = dollar_format(prefix = "€")) +
+  coord_cartesian(ylim = c(0, 5000000)) +# Format y-axis as Euros
+  theme_minimal()
+
+```
+
+**Age (-0.0649)**:
+
+A player's value increases by about 21% per year till they reach a peak value at the age of 28.8 years. The value slowly decreases at first \~1% per year till about 30 and then more sharply \~6.5% after 30 years of age and as the quadratic term dominates this gets higher. So players less than 28.8 years have a strong growth potential whereas older players face a steady decline in value.
+
+**Potential (0.0086)**:
+
+A one-unit increase in potential corresponds to a 0.87% increase in market value This small yet significant effect reinforces the premium placed on long-term development potential.
+
+**International Reputation (-0.0104)**:
+
+The coefficient is not statistically significant (p = 0.228), meaning there is no evidence that international_reputation(1-5) has a meaningful direct effect on market value in this model. Possible reasons: - Col-linearity with overall_rating. - Reputation might indirectly affect value through other factors not included here.
+
+**Overall Rating (0.2078)**:
+
+A one-point increase in overall rating is associated with a 23.13% increase in market value. This high coefficient and significance emphasize that current performance is a critical driver of a player's worth
+
+```{r}
+prediction_interval <- exp(predict(
+  log_value_model, 
+  newdata = fifa_data, 
+  interval = "prediction", 
+  level = 0.95
+))
+
+fifa_data_predictions <- cbind(fifa_data, prediction_interval) |> 
+  rename(
+    predicted_value = fit,
+    lower_bound = lwr,
+    upper_bound = upr
+  )
+
+# Plot actual vs. predicted with prediction intervals
+ggplot(fifa_data_predictions, aes(x = predicted_value, y = value_euro)) +
+  geom_point(color = "blue", alpha = 0.7, size = 2) +  # Actual values
+  geom_errorbar(aes(ymin = lower_bound, ymax = upper_bound), width = 0.2, color = "gray50") +
+  labs(
+    title = "Predicted Market Values with 95% Prediction Intervals",
+    x = "Predicted Market Value (Euro)",
+    y = "Actual Market Value (Euro)"
+  ) +
+  theme_minimal() +
+  scale_x_continuous(labels = dollar_format(prefix = "€"))+
+  scale_y_continuous(labels = dollar_format(prefix = "€"))+
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
+  theme(
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14)
+  )
+
+```
+
+```{r}
+
+plot(model_age$fitted.values, resid(model_age),
+     xlab = "Fitted Values",
+     ylab = "Residuals",
+     main = "Residuals vs Fitted Plot",
+     pch = 20,
+     col = "blue")
+abline(h = 0, col = "red", lwd = 2, lty = 2)
+
+
+```
+
+**Observations** Less than 50million euros we can see that our linear model is a perfect fit and the Actual market value matches the predicted market value. high value players whose value \> 50 million euros might have other factors such as injury history, marketing potential etc., which influences their market value.
+
+```{r}
+
+player_counts <- fifa_data |>
+  summarise(
+    less_than_50 = sum(value_euro < 50000000, na.rm = TRUE),
+    greater_than_50 = sum(value_euro > 50000000, na.rm = TRUE)
+  )
+
+total <- sum(player_counts$less_than_50, player_counts$greater_than_50)
+percentages <- round(c(player_counts$less_than_50, player_counts$greater_than_50) / total * 100, 1)
+
+
+labels_with_counts_percentages <- paste(
+  c("Less than 50M", "Greater than 50M"), 
+  "\n", 
+  c(player_counts$less_than_50, player_counts$greater_than_50), 
+  " (", percentages, "%)", 
+  sep = ""
+)
+
+
+pie(
+  c(player_counts$less_than_50, player_counts$greater_than_50),
+  labels = labels_with_counts_percentages,
+  main = "Player Market Value Distribution",
+  col = c("lightblue", "lightgreen")
+)
+
+
+
+```
+
+```{r}
+
+# Create the linear regression model
+traits_model <- lm(overall_rating ~ ball_control + dribbling + finishing + 
+                     positioning + shot_power + stamina + 
+                     composure + long_shots + reactions + 
+                     vision + volleys, 
+                   data = fifa_data)
+
+```
+
+### Interpretation and Observation
+
+```{r}
+
+vif(traits_model)
+
+vif(log_value_model)
+
+```
+
+### Actionable Insights
+
+**For Player Scouts** - Prioritize young players (age 21-25) with high potential ratings - Focus on players with strong - Ball control (highest correlation to overall rating) - Finishing skills - Positioning - Shot power - Look for players with development potential, as it significantly impacts market value
+
+**For Club Finance Teams** - Value calculation based on our Model - Overall rating is the strongest value driver (23% increase per point) - Potential adds 0.87% value per point - Age negatively impacts value (-6.49% per year)
+
+-   Strategy
+    -   Invest in players under 25 with high potential
+    -   Prioritize players with ratings above 75
+    -   Consider long term development over immediate reputation even though that has other benefits
+
+**For Club Managers** - Player development priorities for attackers - Improve ball control, dribbling and finishing skills. - Focus on positioning and shot power - Performance metrics -

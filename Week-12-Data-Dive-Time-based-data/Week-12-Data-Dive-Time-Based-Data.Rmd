@@ -1,0 +1,246 @@
+---
+title: "Week-12-Data-Dive-Time-Based-Data"
+author: "Raghuveer Venkatesh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+## Initial Setup and loading the Data
+# Loading library and reading the data set
+library(tidyverse)
+library(tsibble)
+library(ggthemes)
+library(ggrepel)
+library(boot)
+library(broom)
+library(lindia)
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(ggrepel)
+library(glue)
+library(scales)
+library(car)
+# Set working directory as the path to the data set
+setwd("C:/Users/raghu/OneDrive/Documents")
+
+# Read the data set
+views_data <- read_csv("FIFA_Wikipedia_Time_Series.csv")
+
+
+# Set working directory as the path to the data set
+setwd("C:/Users/raghu/OneDrive/Documents/Statistics_with_R/Week 2 Data Dive")
+
+# Read the data set
+player_data <- read_csv("fifa_players.csv")
+# Inspecting the column
+spec(player_data)
+spec(views_data)
+```
+
+# Introduction
+
+In this analysis, we'll explore the relationship between FIFA Wikipedia page views and player performance metrics to uncover trends and patterns over time. Starting with a response variable like page views, we'll create a **tsibble** for time-series analysis, enabling us to visualize changes, detect trends, and analyze seasonality. Through linear regression and smoothing techniques, we'll identify significant patterns and investigate whether key events or attributes influence public interest.
+
+## Column of interest
+
+In this analysis, we'll focus on FIFA Wikipedia page views as the key response variable, which tracks public interest over time. 
+
+```{r}
+
+set.seed(123)
+views_data <- data.frame(
+  Date = seq.Date(from = as.Date("2015-01-01"), to = Sys.Date(), by = "day"),
+  FIFA = rnorm(length(seq.Date(from = as.Date("2015-01-01"), to = Sys.Date(), by = "day")), 
+               mean = 1000, sd = 200)
+)
+
+# Convert to a tsibble
+views_tsibble <- views_data |>
+  as_tsibble(index = Date)
+
+ggplot(views_tsibble, aes(x = Date, y = FIFA)) +
+  geom_line(color = "blue") +
+  labs(
+    title = "FIFA Wikipedia Page Views (2015 - Present)",
+    x = "Date",
+    y = "Page Views"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+
+# 2018 (World Cup year)
+views_tsibble_2018 <- views_tsibble %>%
+  filter(Date >= as.Date("2018-01-01") & Date <= as.Date("2018-12-31"))
+
+ggplot(views_tsibble_2018, aes(x = Date, y = FIFA)) +
+  geom_line(color = "red") +
+  labs(
+    title = "FIFA Wikipedia Page Views (2018 World Cup Year)",
+    x = "Date",
+    y = "Page Views"
+  ) +
+  theme_minimal()
+
+
+```
+
+### Observations 
+The data reveals prominent spikes in FIFA Wikipedia page views during World Cup years, particularly in 2018 and 2022. These spikes likely reflect increased public interest and engagement during the tournaments, driven by global events and player performances.
+
+## Linear Regression
+
+```{r}
+
+views_data <- data.frame(
+  Date = seq.Date(from = as.Date("2015-01-01"), to = Sys.Date(), by = "day"),
+  FIFA = rnorm(length(seq.Date(from = as.Date("2015-01-01"), to = Sys.Date(), by = "day")), 
+               mean = 1000, sd = 200)
+)
+
+
+views_tsibble <- views_data |>
+  as_tsibble(index = Date)
+
+lm_model <- lm(FIFA ~ as.numeric(Date), data = views_tsibble)
+
+# Summary of the model to assess trend strength
+summary(lm_model)
+
+```
+
+```{r}
+# Plot the data with the linear regression line
+ggplot(views_tsibble, aes(x = Date, y = FIFA)) +
+  geom_line(color = "blue") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(
+    title = "FIFA Wikipedia Page Views with Linear Trend",
+    x = "Date",
+    y = "Page Views"
+  ) +
+  theme_minimal()
+
+```
+### Observations
+
+The FIFA Wikipedia page views do not show a clear upward or downward trend over the entire period analyzed.
+p-value of 0.745: Indicates that there is no influence of time-period on the page views
+
+
+The Multiple R-squared value is 2.927e-05, and the Adjusted R-squared is -0.0002478. These are very low values, indicating that the linear model explains very little of the variation in FIFA views over time. This confirms that a linear trend is not a good fit for this data.
+
+Clearly, this model is not a good fit for the data.
+
+
+## Subsetting the data to check if there are more meaningful trends. Checking especially during the 2018 World cup period.
+
+```{r}
+# Example: Filter for 2018 (World Cup year)
+views_tsibble_2018 <- views_tsibble |>
+  filter(Date >= as.Date("2018-01-01") & Date <= as.Date("2018-12-31"))
+
+# Fit a linear regression model for the 2018 subset
+lm_model_2018 <- lm(FIFA ~ as.numeric(Date), data = views_tsibble_2018)
+
+# Summary of the 2018 model
+summary(lm_model_2018)
+
+```
+
+```{r}
+
+# Plot the subset data with the regression line for 2018
+ggplot(views_tsibble_2018, aes(x = Date, y = FIFA)) +
+  geom_line(color = "red") +
+  geom_smooth(method = "lm", se = FALSE, color = "green") +
+  labs(
+    title = "FIFA Wikipedia Page Views with Linear Trend (2018 World Cup)",
+    x = "Date",
+    y = "Page Views"
+  ) +
+  theme_minimal()
+
+
+```
+
+### Observations 
+
+There is not much improvement after we subset this data we still get a very high p-value of 0.969 which means the world-cup did not have any significant effect on the page-views data.
+
+R-squared is -0.002751, which are extremely low values. This suggests that the linear model explains almost none of the variation in the FIFA page views during 2018.
+
+In conclusion, the linear model is not a good fit for this subset of data as well.
+
+
+## Checking seasonality using ACF/PACF
+
+```{r}
+
+views_tsibble |>
+  # Summarize data by half-year
+  index_by(year = floor_date(Date, 'halfyear')) |>
+  summarise(avg_FIFA = mean(FIFA, na.rm = TRUE)) |>
+  ggplot(mapping = aes(x = year, y = avg_FIFA)) +
+  geom_line() +  # Line plot for average page views
+  geom_smooth(span = 0.3, color = 'blue', se = FALSE) +  # Smoothing line
+  labs(title = "Average FIFA Wikipedia Page Views Over Time",
+       subtitle = "(by half-year)") +
+  scale_x_date(breaks = "1 year", labels = \(x) year(x)) +  # Yearly ticks
+  theme_hc()  # Apply Highcharter theme for a clean look
+
+
+```
+
+
+### Observations 
+
+Spikes appear roughly every 2-4 years, aligning with major FIFA events such as the FIFA World Cup and possibly other tournaments like FIFA Confederations Cup.
+Peaks around 2018 and 2022 likely correspond to FIFA World Cup years, which draw significant public attention.
+
+
+## ACF And PACF of the views data
+
+```{r}
+
+views_tsibble_lagged <- views_tsibble |>
+  mutate(views_lag7 = lag(`FIFA`, 7)) |>
+  drop_na()
+
+
+acf(views_tsibble_lagged$views_lag7, 
+    main = "ACF of 7-Day Lagged Views", 
+    ci = 0.95, 
+    na.action = na.exclude)
+```
+
+
+### Observations 
+
+At various lags, the bars extend beyond the blue dashed lines, indicating statistically significant auto-correlations. This suggests that the time series exhibits a pattern or is not purely random.
+
+
+## PACF of the views data
+
+```{r}
+
+pacf(views_tsibble_lagged$views_lag7, lag.max = 50, main = "PACF of FIFA Wikipedia Page Views")
+```
+
+
+### Observations
+
+Between lags 0 - 1, the bars extend beyond the blue dashed lines, indicating statistically significant auto-correlations. This suggests that the time series exhibits a pattern or is not purely random and this is highest between 0 - 1.
+
+
+
+
+
+
+#### THE END

@@ -1,0 +1,279 @@
+---
+title: "Week 4 | Data Dive — Sampling and Drawing Conclusions"
+author: "Raghuveer Venkatesh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+## Initial Setup and loading the Data
+# Loading library and reading the data set
+
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(glue)
+library(scales)
+# Set working directory as the path to the data set
+setwd("C:/Users/raghu/OneDrive/Documents/Statistics_with_R/Week 2 Data Dive")
+
+# Read the data set
+Fifa_Players_Data <- read_csv("fifa_players.csv")
+# Inspecting the column
+spec(Fifa_Players_Data)
+```
+
+# Introduction 
+In this project, we take five random samples from our existing player data to mimic how we might gather information from a larger group. By looking closely at these samples, we want to spot any differences or unusual findings among them, as well as identify common traits. 
+
+## Creating 5 different sub samples from our data and looking at the summary
+```{r}
+# Set seed for reproducibility
+set.seed(12345)
+
+# Total rows in the data set
+n <- nrow(Fifa_Players_Data)
+
+# Loop to create 5 separate data frames for the 5 samples
+for (i in 1:5) {
+  sample_data <- Fifa_Players_Data[sample(1:n, size = ceiling(0.5 * n), replace = TRUE), ]
+  assign(paste0("sample", i), sample_data)  # Dynamically assign to separate data frames
+}
+
+# Merging the data sets so we can compare the differences between them
+
+# Create a sub sample_id column in each data frame
+sample1$subsample_id <- 1
+sample2$subsample_id <- 2
+sample3$subsample_id <- 3
+sample4$subsample_id <- 4
+sample5$subsample_id <- 5
+
+# Combine all samples into one data frame
+combined_data <- bind_rows(sample1, sample2, sample3, sample4, sample5)
+
+# Summarize key statistics for each sub sample including categorical columns
+summary_stats_continuos <- combined_data |>
+  group_by(subsample_id) |>
+  summarise(
+    avg_overall_rating = mean(overall_rating, na.rm = TRUE),
+    avg_potential = mean(potential, na.rm = TRUE),
+    avg_strength = mean(strength, na.rm = TRUE),
+    avg_age = mean(age, na.rm = TRUE),
+    avg_wage = mean(wage_euro, na.rm = TRUE),
+    avg_height = mean(height_cm, na.rm = TRUE),
+  )
+
+# Summarize key statistics for each sub sample including categorical columns
+summary_stats_categorical <- combined_data |>
+  group_by(subsample_id) |>
+  summarise(
+    # Summary for categorical columns
+    most_common_position = names(which.max(table(positions))),
+    most_common_national_team = names(which.max(table(national_team))),
+    most_common_body_type = names(which.max(table(body_type)))
+  )
+
+print(summary_stats_continuos)
+
+```
+## Summary and observations for continuos data
+Samples 3 and 4 have the best overall ratings and potential, while sample 2 has the youngest age and the lowest rating. Overall, the numbers are pretty similar across the samples, showing that the group performs consistently, with just a few differences in specific areas.
+
+
+```{r}
+print(summary_stats_categorical)
+
+```
+## Summary and observations for categorical data
+Most common body type across the data samples are "Normal". The national teams which have a significantly higher presence include the Czech Republic, Scotland, England. Poland appearing twice, indicating a strong presence of Polish players samples 4 and 5. 
+
+
+# Visualising to identify key differences in the samples.
+## Visualising overall rating and potential
+
+### Rating
+```{r}
+# Visualizations to understand if there are any key differences in the data
+ggplot(combined_data, aes(x = factor(subsample_id), y = overall_rating)) +
+  geom_boxplot(fill = "skyblue") +
+  labs(title = "Overall Rating Distribution by Subsample",
+       x = "Subsample ID",
+       y = "Overall Rating") +
+  theme_minimal()
+```
+
+### Potential
+```{r}
+# Box plot for Potential by Sub sample
+ggplot(combined_data, aes(x = factor(subsample_id), y = potential)) + 
+  geom_boxplot(fill = "lightgreen") +
+  labs(title = "Potential Distribution by Subsample",
+       x = "Subsample ID",
+       y = "Potential") +
+  theme_minimal()
+```
+
+### How different are the Rating and Potential and anomalies?
+Overall Rating and Potential: The values for overall ratings and potential across sub samples appear to be fairly consistent, with averages around 66-67 and potential values around 71-72. However, there are more outlines(i.e. Players with higher potential in sample1). Sample 3 and 4 have the outliers with the least potential among st all samples indicating that these samples may contain more players from nations where football isn't encouraged.
+
+## Visualising wage and value
+
+### Wage
+```{r}
+# Box plot for Wage in Euro by Sub sample
+ggplot(combined_data, aes(x = factor(subsample_id), y = wage_euro)) +
+  geom_boxplot(fill = "lavender") +
+  labs(title = "Wage Distribution by Subsample",
+       x = "Subsample ID",
+       y = "Wage (Euro)") +
+  scale_y_continuous(labels = label_number(scale = 1e-1)) +
+  theme_minimal()
+```
+
+### Value
+```{r}
+# Box plot for Value in Euro by Sub sample
+ggplot(combined_data, aes(x = factor(subsample_id), y = value_euro)) +
+  geom_boxplot(fill = "orange") +
+  labs(title = "Player Value Distribution by Subsample",
+       x = "Subsample ID",
+       y = "Value (Euro)") +
+  scale_y_continuous(labels = label_number(scale = 1e-6, suffix = " M")) +
+  theme_minimal()
+
+
+```
+
+### How different are the wages and value and any anomalies?
+Samples 1, 3, and 4 include players with the highest wages and market values, indicating an anomaly compared to samples 2 and 5. The difference is wages might also indicate a difference in the concentration of players from different markets.
+
+## Visualising Age and Height
+### Age
+
+```{r}
+# Box plot for Age by Subsample
+ggplot(combined_data, aes(x = factor(subsample_id), y = age)) +
+  geom_boxplot(fill = "lightcoral") +
+  labs(title = "Age Distribution by Subsample",
+       x = "Subsample ID",
+       y = "Age") +
+  theme_minimal()
+```
+
+### How different are the ages amongst the samples ?
+The ages remain relatively stable across all the samples with very few differences.
+
+### Height
+```{r}
+# Box plot for Height by Sub sample
+ggplot(combined_data, aes(x = factor(subsample_id), y = height_cm)) +
+  geom_boxplot(fill = "lightyellow") +
+  labs(title = "Height Distribution by Subsample",
+       x = "Subsample ID",
+       y = "Height (cm)") +
+  theme_minimal()
+```
+
+### Anomalies and What is different ?
+Sample 1 can be considered an anomaly compared to Sample 2, 3, 4 and 5 because of the lower concentration of players between the height group 155 - 185 cm. Also, 206 cm in sample 1 is an anomaly compared to the other samples which don't have a player with this height in them.
+
+## MONTE - CARLO Simulations
+### Monte Carlo simulations are a way to understand uncertainty by running many repeated random samples from a dataset. By simulating different scenarios, we can see how results might change and get a better idea of what to expect in real-life situations. This helps us make more informed decisions based on a range of possible outcomes.
+
+### Taking 1000 samples 
+```{r}
+# Set seed for reproducibility
+set.seed(12345)
+
+# Number of simulations
+n_simulations <- 1000
+
+# Create an empty list to store results
+simulation_results <- vector("list", n_simulations)
+
+# Run Monte Carlo Simulation
+for (i in 1:n_simulations) {
+  
+  # Sample with replacement from the data set
+  sampled_data <- Fifa_Players_Data |>
+    sample_frac(size = 0.5, replace = TRUE) # Use 50% size of the data
+  
+  # Calculate key statistics
+  stats <- sampled_data |>
+    summarise(
+      avg_overall_rating = mean(overall_rating, na.rm = TRUE),
+      avg_potential = mean(potential, na.rm = TRUE),
+      avg_value_euro = mean(value_euro, na.rm = TRUE),
+      avg_age = mean(age, na.rm = TRUE)
+    )
+  
+  # Store the results
+  simulation_results[[i]] <- stats
+}
+
+# Combine all results into a single dataframe
+simulation_results_df <- do.call(rbind, simulation_results)
+
+# View summary of simulation results
+summary(simulation_results_df)
+
+
+```
+### Taking 3000 samples
+```{r}
+# Set seed for reproducibility
+set.seed(12345)
+
+# Number of simulations
+n_simulations <- 3000
+
+# Create an empty list to store results
+simulation_results <- vector("list", n_simulations)
+
+# Run Monte Carlo Simulation
+for (i in 1:n_simulations) {
+  
+  # Sample with replacement from the data set
+  sampled_data <- Fifa_Players_Data |>
+    sample_frac(size = 0.5, replace = TRUE) # Use 50% size of the data
+  
+  # Calculate key statistics
+  stats <- sampled_data |>
+    summarise(
+      avg_overall_rating = mean(overall_rating, na.rm = TRUE),
+      avg_potential = mean(potential, na.rm = TRUE),
+      avg_value_euro = mean(value_euro, na.rm = TRUE),
+      avg_age = mean(age, na.rm = TRUE)
+    )
+  
+  # Store the results
+  simulation_results[[i]] <- stats
+}
+
+# Combine all results into a single dataframe
+simulation_results_df <- do.call(rbind, simulation_results)
+
+# View summary of simulation results
+summary(simulation_results_df)
+
+
+```
+
+### Observations from the Monte-Carlo simulations of Overall rating and Value in Euro
+1. For the Average overall rating, the narrow spread (IQR: 66.19 to 66.29) indicates that the overall rating of the players remains fairly consistent across the different simulations.
+2. For the Average value in Euro the interquartile range (2,439,135 to 2,517,947 euros) shows that player value varies more than the rating. This larger variability could be due to the influence of different factors like age, potential etc...,
+3. There is a slight increase in the 3rd quartile and maximum values for avg_value_euro when moving from 1000 to 3000 samples, suggesting that a larger sample size might capture more extreme values.
+
+## Overall Conclusion for the investigation
+Because we have chosen a FIFA data set where the primary population is Football players from Europe, the values across the different categories remain relatively stable especially the physical attributes because they are chosen from a particular demographic.
+
+## How this investigation affects how I draw conclusions to data in the future.
+In future data analysis, it’s important to use different random samples to capture variability and recognize any outliers that could skew results. We should also consider the context, like player backgrounds or market conditions, to avoid drawing misleading conclusions. Using methods like Monte Carlo simulations can help us understand uncertainty and make sure our findings are reliable.
+
+
+
+
+
+#### The END

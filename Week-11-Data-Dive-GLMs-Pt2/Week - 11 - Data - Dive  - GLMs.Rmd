@@ -1,0 +1,160 @@
+---
+title: "Week - 11 - Data - Dive - GLMs"
+author: "Raghuveer Venkatesh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+## Initial Setup and loading the Data
+# Loading library and reading the data set
+library(tidyverse)
+library(ggthemes)
+library(ggrepel)
+library(boot)
+library(broom)
+library(lindia)
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(ggrepel)
+library(glue)
+library(scales)
+library(car)
+# Set working directory as the path to the data set
+setwd("C:/Users/raghu/OneDrive/Documents/Statistics_with_R/Week 2 Data Dive")
+
+# Read the data set
+player_data <- read_csv("fifa_players.csv")
+# Inspecting the column
+spec(player_data)
+```
+
+## Introduction
+
+In this notebook, we will build a generalized linear model with overall rating as the response variable and stamina, strength, dribbling and shooting as the explanatory variables. After this, we will diagnose potential issues, interpret model co-efficient.
+
+
+```{r}
+
+# Fit the GLM model
+model <- glm(overall_rating ~ stamina + strength + dribbling + acceleration,
+                 data = player_data,
+                 family = gaussian())  # Use gaussian for a continuous response variable
+
+summary(model)
+
+```
+
+
+## Interpretation of the co-efficients
+
+Intercept: The intercept is 46.735, which which is the overall_rating when all other variables are 0.
+
+Stamina, Strength, Dribbling, Acceleration: Co-efficient are 0.010, 0.195, 0.159, -0.040 indicating a positive relationship for Stamina, Strength, Dribbling and a negative relationship for Acceleration and that for every point increase in Stamina, Strength, Dribbling, the response variable overall rating increases by 0.010, 0.195, 1.159. For acceleration, 1 point increase will result in decrease of 0.040.
+
+The p-values give that strength, dribbling and acceleration are highly significant to the overall rating whereas stamina is also significant but now by a big margin.
+
+## Evaluating the model using diagnostic plots
+
+-   Residuals vs. $\hat{y}$ values
+-   Residuals vs. $x$ values
+-   Residual Histogram
+-   QQ-Plot
+-   Cook's D by Observation\*
+
+### Residuals vs Fitted Values
+
+```{r}
+
+# Calculate fitted values and residuals
+fitted_values <- model$fitted.values
+residuals <- model$residuals
+
+# Plot Residuals vs Fitted Values
+plot(fitted_values, residuals, 
+     xlab = "Fitted Values (hat{y})", 
+     ylab = "Residuals", 
+     main = "Residuals vs. Fitted Values")
+abline(h = 0, col = "red")  # Horizontal line at 0
+
+```
+
+
+### Interpretation
+
+A lot of variances of the error terms are consistent towards the higher fitted values indicating better model fit at higher values and poor model fit towards lower values.
+
+### Residuals vs Each Predictor
+
+```{r}
+
+par(mfrow = c(2, 2)) # Arranges plots in a 2x2 grid
+plot(model$model$stamina, resid(model), 
+     xlab = "Stamina", ylab = "Residuals", main = "Residuals vs Stamina")
+plot(model$model$strength, resid(model), 
+     xlab = "Strength", ylab = "Residuals", main = "Residuals vs Strength")
+plot(model$model$dribbling, resid(model), 
+     xlab = "Dribbling", ylab = "Residuals", main = "Residuals vs Dribbling")
+plot(model$model$acceleration, resid(model), 
+     xlab = "Acceleration", ylab = "Residuals", main = "Residuals vs Acceleration")
+
+
+```
+
+
+### Interpretation
+
+We can see that Strength has the most linear relationship with the Strength and Acceleration. But Stamina and Dribbling contribute more towards the non-linearity with overall rating.
+
+### QQ - Plot
+
+```{r}
+
+# QQ-Plot
+qqnorm(residuals)
+qqline(residuals, col = "red")
+
+
+```
+
+### Interpretation
+
+We can see that towards the start and tail end, there is a deviation of the samples indicating that it's not a normal distribution of the residuals.
+
+### Cook’s Distance
+
+```{r}
+
+plot(cooks.distance(model), type = "h", main = "Cook's Distance by Observation", 
+     ylab = "Cook's Distance", xlab = "Observation Index")
+abline(h = 4 / length(cooks.distance(model)), col = "red", lty = 2)
+
+```
+
+### Interpretation
+
+We can see that there are a lot of values especially towards the tail end having a strong impact on the model fit. 
+
+## Issues with the model
+
+1. The residuals vs fitted values indicate patterns suggesting that the relationships between predictors and the response are not entirely linear.
+
+2. There is Heteroscedasticity because the spread of residuals increases with fitted values. This affects the reliability of standard errors.
+
+3. Towards the start and the tail end of the Q-Q plot the residuals are not normally distributed.
+
+4. With Cook's D we can see that there are observations with high Cook's distance towards the tail end indicating the presence of outliers.
+
+## Interpretation of One Co-efficient - Strength 
+
+The coefficient for strength is 0.1947, suggesting that for each one-unit increase in a player's strength, the expected value of the overall rating increases by approximately 0.195 units, assuming other variables remain constant. This relationship is statistically significant, with a p-value less than 0.001, indicating strong evidence that strength has a positive impact on overall rating.
+
+
+
+
+###### THE END
+
+

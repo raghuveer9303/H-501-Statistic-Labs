@@ -1,0 +1,172 @@
+---
+title: "Week 8 - Data Dive - Regression Model"
+author: "Raghuveer Venkatesh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+## Initial Setup and loading the Data
+# Loading library and reading the data set
+
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(glue)
+library(scales)
+# Set working directory as the path to the data set
+setwd("C:/Users/raghu/OneDrive/Documents/Statistics_with_R/Week 2 Data Dive")
+
+# Read the data set
+player_data <- read_csv("fifa_players.csv")
+# Inspecting the column
+spec(player_data)
+```
+
+## Introduction
+In this report, we will explore the factors influencing a soccer player's market value (`value_euro`). First, we will conduct an ANOVA test using a categorical explanatory variable and follow it up by building a simple linear regression model using a continuous explanatory variable. These tests will help us understand which factors are statistically significant in influencing player market value and how they relate to the broader soccer market.
+
+
+### Most valuable column of data
+- The **value_euro** column represents the player's estimated market value in euros.
+
+#### Why Value in euros ?
+- **Context Relevance**: For teams and managers, market value is a critical indicator, as it directly affects the financial aspects of managing a team. It is likely to be influenced by other important player attributes, such as skill level, age, and potential.
+- **Business Decisions**: Soccer clubs are constantly buying and selling players. Their decision-making revolves around how much a player is worth. Understanding and predicting market value based on other attributes can lead to better transfer market strategies.
+
+### Selection a Categorical Explanatory Variable
+We will use **`positions`** as our categorical explanatory variable. Player positions (e.g., forward, midfielder, defender) are expected to influence market value, as players in different roles may be valued differently depending on their contribution to the team's success.
+
+Consolidating Player Positions before we run the ANOVA test
+
+- Attackers: Includes forwards and wingers.
+- Midfielders: Includes central midfielders, defensive midfielders, and attacking midfielders.
+- Defenders: Includes center-backs, full-backs, and wing-backs.
+- Goalkeepers: Goalkeepers remain in their own category.
+
+```{r}
+unique_positions <- unique(player_data$positions)
+
+# Define the position mapping
+position_mapping <- list(
+  "Attackers" = c("CF", "ST", "RW", "LW", "CAM", "RM", "LM"),
+  "Midfielders" = c("CM", "CDM", "CAM", "RM", "LM"),
+  "Defenders" = c("CB", "RB", "LB", "RWB", "LWB"),
+  "Goalkeepers" = c("GK")
+)
+
+# Create a function to classify positions
+classify_position <- function(position) {
+  for (category in names(position_mapping)) {
+    if (position %in% position_mapping[[category]]) {
+      return(category)
+    }
+  }
+  return(NA)  # Return NA if position doesn't match
+}
+
+# Split positions and add the first category as a new column to the original dataset
+player_data <- player_data |>
+  # Split positions that contain commas into separate rows
+  separate_rows(positions, sep = ",") |>
+  # Trim whitespace from positions (if any)
+  mutate(positions = trimws(positions)) |>
+  # Classify the positions and keep only the first match
+  mutate(Category = sapply(positions, classify_position)) |>
+  # Group by player and take only the first position category
+  group_by(name) |>
+  mutate(Category = first(na.omit(Category))) |>
+  ungroup()  # Remove the grouping
+
+table(player_data$Category)
+
+```
+### Null Hypothesis:
+There is no significant difference in the average player value between different position categories.
+
+### Alternate Hypothesis:
+There is a significant difference in the average player value between at least one of the position categories.
+
+## Perform ANOVA usign Player Value
+
+```{r}
+
+# Perform ANOVA test using player value
+anova_value <- aov(value_euro ~ Category, data = player_data)
+
+# Summarize the ANOVA result
+summary(anova_value)
+
+```
+### Observation
+We get a extremely small p-value of 2e-16 meaning we reject the null hypothesis, meaning there is enough evidence to conclude that player values differ significantly across position categories.
+
+***What it means to Agents and Players ?***
+During contract negotiations, Agents and players can leverage these findings. Players in higher-valued categories may negotiate from a stronger position, advocating for better salaries based on the established differences in market value.
+
+## Choosing a Continuous Predictor Variable
+
+To build a linear regression model, we need to select a continuous or ordered integer column that could potentially influence the response variable (player value). One logical choice is player potential, as players with higher potential are often valued more in the market.
+
+```{r}
+
+# Fit the linear regression model using player potential to predict player value
+model <- lm(value_euro ~ potential, data = player_data)
+
+# Summarize the linear regression model
+summary(model)
+
+
+```
+### Explaining the co-efficients
+
+Intercept: -37,737,985 : This is the expected value of value_euro when potential is zero.
+The p-value is <2e-16, indicating that this coefficient is statistically significant.
+
+Multiple R-squared: 0.3376
+Approximately 33.76% of the variance in player value can be explained by the potential variable
+
+Potential: 563,593
+For each one-unit increase in potential, the model predicts an increase of approximately 563,593 Euros in value_euro.
+
+## Creating the Visualisation
+
+```{r}
+
+# Create predictions
+player_data <- player_data |>
+  mutate(predicted_value = predict(model, newdata = player_data))
+
+# Plotting
+ggplot(player_data, aes(x = potential, y = value_euro)) +
+  geom_point(alpha = 0.5, color = "blue") +  # Actual data points
+  geom_line(aes(y = predicted_value), color = "red", size = 1) +  # Regression line
+  labs(title = "Linear Regression of Player Value vs. Player Potential",
+       x = "Player Potential",
+       y = "Player Value (in Euros)") +
+  theme_minimal()
+
+
+
+```
+
+
+## Interpretation and Recommendations
+
+There is a positive linear relationship between player potential and player value; as potential increases, so does the expected value.
+
+The model indicates that potential is a significant predictor of player value in this dataset.
+
+### Additional Questions 
+
+What other factors (e.g., age, skill ratings, injury history) could improve the predictive power of the model?
+
+How does the player’s position influence their value? Would incorporating position into the model yield better predictions?
+
+
+
+
+
+
+##### THE END

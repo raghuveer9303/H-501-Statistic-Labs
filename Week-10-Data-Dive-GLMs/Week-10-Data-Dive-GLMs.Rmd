@@ -1,0 +1,170 @@
+---
+title: "Week-10-DataDive-GLMs"
+author: "Raghuveer Venkatesh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+## Initial Setup and loading the Data
+# Loading library and reading the data set
+library(tidyverse)
+library(ggthemes)
+library(ggrepel)
+library(boot)
+library(broom)
+library(lindia)
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(glue)
+library(scales)
+library(car)
+# Set working directory as the path to the data set
+setwd("C:/Users/raghu/OneDrive/Documents/Statistics_with_R/Week 2 Data Dive")
+
+# Read the data set
+player_data <- read_csv("fifa_players.csv")
+# Inspecting the column
+spec(player_data)
+```
+
+# Introduction
+
+In this project, we explore preferred foot (right vs. left) as a binary variable to see how it relates to player skills and physical attributes. Using logistic regression, we’ll interpret the effects of key attributes, build a confidence interval for one coefficient, and discuss the insights gained along with potential follow-up questions.
+
+## Why Preferred foot ?
+
+This column can be converted into binary value easily Left Foot = 0, Right Foot = 1. Preferred foot can significantly influence a player's performance in certain positions or play styles, which might correlate with overall ratings, specific skill metrics (like crossing or finishing), or market value.
+
+
+# Logistic Regression Model for Preferred foot
+
+```{r}
+
+#Encoding the values as 0 and 1.
+
+player_data <- player_data |>
+  mutate(preferred_foot_binary = ifelse(preferred_foot == "Right", 1, 0))
+
+# Select the explanatory variables
+explanatory_vars <- c("agility", "ball_control", "crossing", "dribbling")
+
+
+model <- glm(preferred_foot_binary ~ agility + ball_control + crossing + dribbling,
+             data = player_data, family = binomial(link = "logit"))
+
+
+summary(model)
+
+exp(coef(model))
+```
+
+## Explaining the co-efficients
+
+  Intercept: 1.997097 
+  **Odds Ratio**: exp(1.9971) ≈ 7.37
+  This suggests that at baseline, odds are a player is 7.37 times more likely to be right-footed than left-footed.
+  
+   Agility
+   **Odds Ratio**: exp(0.0050) ≈ 1.005
+   Each point increase in agility raises the odds of being right footed by 0.5%
+   
+   Ball Control: 0.0309
+  **Odds Ratio**: exp(0.0309) ≈ 1.031
+   For each additional point in ball control, the odds of being right-footed increase by approximately 3.1%, indicating that ball control is positively associated    with right-foot preference.
+
+   Crossing: -0.0545
+   **Odds Ratio**: exp(-0.0545) ≈ 0.947
+   Each additional point in crossing skill slightly decreases the odds of being right-footed by about 5.3%, suggesting that players with higher crossing ability      may be more likely to prefer their left foot.
+  
+   Dribbling: -0.0021
+   **Odds Ratio**: exp(-0.0021) ≈ 0.998
+   With an odds ratio near 1, each point increase in dribbling has no meaningful impact on the odds of being right-footed, indicating that dribbling skill does not    significantly influence foot preference.
+
+   
+### P - Value
+
+
+Ball control and Crossing have very small p-values < 0.05 indicating that they are having a significant effect on Preferred Foot. Whereas Agility and Dribbling have a p-value > 0.05 especially dribbling with a p-value of 0.5452 so they have an influence on whether a player is Right-Footed.
+
+## Plotting the model using Agility
+
+```{r}
+
+player_data$predicted_prob <- predict(model, type = "response")
+
+# Create a plot
+ggplot(player_data, aes(x = agility, y = predicted_prob)) +
+  geom_point(aes(color = preferred_foot), alpha = 0.5) +  # Original data points
+  geom_line(stat = "smooth", method = "glm", method.args = list(family = "binomial"), color = "blue") +  # Logistic regression curve
+  labs(title = "Logistic Regression: Predicted Probability of Being Right-Footed",
+       x = "Agility Score",
+       y = "Predicted Probability of Being Right-Footed") +
+  scale_color_manual(values = c("lightblue", "lightcoral"), 
+                     name = "Preferred Foot", 
+                     labels = c("Left-Footed", "Right-Footed")) +
+  theme_minimal()
+
+```
+### Interpretation
+
+As Agility score increases it's most probable that the player is Left footed.
+
+
+# Confidence Interval and Standard error for Agility
+
+
+```{r}
+ggplot(player_data, aes(x = preferred_foot, y = agility, fill = preferred_foot)) +
+  geom_boxplot() +
+  labs(title = "Distribution of Agility by Foot Preference",
+       x = "Foot Preference",
+       y = "Agility Score") +
+  theme_minimal() +
+  scale_fill_manual(values = c("lightblue", "lightcoral"))
+
+```
+
+```{r}
+
+coef_agility <- coef(model)["agility"]
+se_agility <- summary(model)$coefficients["agility", "Std. Error"]
+
+
+# Calculate the 95% Confidence Interval for agility coefficient
+ci_lower <- coef_agility - 1.96 * se_agility
+ci_upper <- coef_agility + 1.96 * se_agility
+
+# Exponentiation of the CI to interpret it as an odds ratio range
+ci_odds_ratio <- exp(c(ci_lower, ci_upper))
+
+# Print results
+cat("Odds Ratio for Agility:", exp(coef_agility), "\n")
+cat("95% Confidence Interval for Odds Ratio of Agility:", ci_odds_ratio, "\n")
+
+```
+### Interpretation
+
+For each one-point increase in agility, the odds of a player being right-footed increase by approximately 0.5%.
+
+
+CI ranges from 1.0011 to 1.0090 meaning range of values that we are 95% confident contains the true odds ratio of agility in the population from which the sample was drawn.
+
+
+Since it's positive, that means agility is positively associated with being right-footed meaning as the player has higher agility they are more likely to be Right footed.
+
+## Further questions
+
+How does these findings vary across different nationalities ?. 
+
+Does it have the same impact on players with high rating as well as players with low rating ?
+
+
+
+
+### THE END

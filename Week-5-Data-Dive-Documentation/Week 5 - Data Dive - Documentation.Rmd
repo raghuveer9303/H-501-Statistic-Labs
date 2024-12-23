@@ -1,0 +1,109 @@
+---
+title: "Week 5 | Data Dive - Documentation"
+author: "Raghuveer Venkatesh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+## Initial Setup and loading the Data
+# Loading library and reading the data set
+
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(glue)
+library(scales)
+# Set working directory as the path to the data set
+setwd("C:/Users/raghu/OneDrive/Documents/Statistics_with_R/Week 2 Data Dive")
+
+# Read the data set
+Fifa_Players_Data <- read_csv("fifa_players.csv")
+# Inspecting the column
+spec(Fifa_Players_Data)
+
+```
+
+# Introduction
+This week’s data dive is all about understanding why it’s important to document your data sets and refer to the data documentation before using the data sets. Doing so helps avoid mistakes and ensures your analysis is clear and reliable.
+
+We dive further into the data and look at some columns whose data is unclear without the documentation and why they have chosen to represent the data in this particular way. We also comment on what would have happened if we didn't read the documentation before using the data.
+
+# Three Columns whose data is unclear without documentation
+
+### 1. international_reputation(1-5):
+```{r}
+print(unique(Fifa_Players_Data$`international_reputation(1-5)`))
+```
+#### Unclear aspect
+The exact meaning of the "international reputation" rating isn't clear. Does it refer to a player's fame ?,  performance ?, or something else?. Without documentation, it's unclear how this is calculated. Is 1 the highest or 5 the highest.
+
+#### Reason for encoding this way
+It simplifies reputation on a 1-5 scale, which is easy to process and compare across players.
+
+#### Issue without documentation
+We could have assumed that 1 is the highest while 5 is the highest which could have compromised the accuracy of our analysis.
+
+
+### 2. body_type:
+```{r}
+print(unique(Fifa_Players_Data$body_type))
+```
+#### Unclear aspect
+Only few values like "Lean", "Stocky", "Normal" are obvious. Others like "Neymar", "Messi" e.g. are unclear.
+
+#### Reason for encoding this way
+Probably because Messi, Ronaldo are easily recognizable players so their body type is more recognizable and can be used as reference as compared to "Normal", "Lean" etc.
+
+#### Issue without documentation
+Without documentation the data in this column will be overlooked as users are not able to identify the impact this has on overall player performance.
+
+
+### 3. weak_foot(1-5):
+```{r}
+print(unique(Fifa_Players_Data$`weak_foot(1-5)`))
+```
+#### Unclear aspect
+Does higher value mean better performance with the weaker foot or is it the other way around ? i.e. It isn't immediately obvious what the scale represent.
+
+#### Reason for encoding this way
+It simplifies the explanation on how players play with a non-dominant foot on a 1-5 scale, which is easy to analyze and compare different players.
+
+#### Issue without documentation
+We could have assumed that 1 is the highest while 5 is the highest which could have led to incorrect assessment of the players abilities.
+
+# Unclear data even with documentation
+
+## release_clause_amount
+
+#### Unclear aspect
+It is unclear how this value is calculated and why certain players have vastly different release clause despite similar rating, this is not clarified or mentioned anywhere in the documentation.
+
+E.g. Release clause amount can be influenced by a variety of factors not limited to Age, Market demand, Player position and recent player performance.
+
+### Visualisation Release Clause vs Player Rating
+```{r}
+# Creating a scatter plot for release clause vs. player rating
+ggplot(Fifa_Players_Data, aes(x = overall_rating, y = release_clause_euro / 1000000)) +  # Convert release clause to millions
+  geom_point(alpha = 0.4, color = "red") +  # Use alpha for transparency
+  labs(title = "Release Clause vs. Player Rating", 
+       x = "Player Rating", 
+       y = "Release Clause (Millions of Euros)") +
+  theme_minimal()
+
+```
+#### Observations
+We can see as the Player rating increases, there is more spread in the Release Clause values. How the release clause value is calculated is nowhere mentioned in the documentation which could lead to observers directly correlating Player rating with Release clause without considering other influencing other factors such as Age, Market Demand and Player position.
+
+#### Mitigation strategies
+1. Add disclaimers when publishing this data that there can be more factors which influence the Release clause other than Player Rating when publishing to viewers.
+2. Enhance the documentation to explain the factors influencing release clauses.
+
+
+
+
+
+
+
+#### The END

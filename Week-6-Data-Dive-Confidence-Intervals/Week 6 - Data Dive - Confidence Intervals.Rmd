@@ -1,0 +1,197 @@
+---
+title: "Week 6 Data Dive - Confidence Intervals"
+author: "Raghuveer Venkatesh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+## Initial Setup and loading the Data
+# Loading library and reading the data set
+
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(glue)
+library(scales)
+# Set working directory as the path to the data set
+setwd("C:/Users/raghu/OneDrive/Documents/Statistics_with_R/Week 2 Data Dive")
+
+# Read the data set
+player_data <- read_csv("fifa_players.csv")
+# Inspecting the column
+spec(player_data)
+```
+
+## Introduction
+
+In this RMarkdown notebook, we'll explore relationships between pairs of numbers in the data, focusing on how one might affect the other. We will then plot a relationship between the two pairs and then draw conclusions based on the observation. Finally, we will calculate the correlation co-efficient between the these combinations and build a confidence interval for each of the response variables.
+
+## Building our pairs
+
+### Pair 1: Value in Euros vs. Overall Rating
+
+This new variable shows the value per unit of rating, helping to explore how much market value each rating point represents.
+
+```{r}
+# Create the 'value_per_rating' column
+player_data$value_per_rating <- player_data$value_euro / player_data$overall_rating
+head(player_data$value_per_rating)
+```
+
+### Explaination
+In this pair, we treat market value (value_euro) as the response variable and the overall ratings the explanatory variable to investigate how a player's rating impacts their market value.
+
+## Pair 2: Stamina vs. Strength
+
+This new variable shows the ratio of stamina to strength, indicating how balanced the player's endurance is compared to their strength.
+
+```{r}
+# Create the 'endurance_to_strength_ratio' column
+player_data$endurance_to_strength_ratio <- player_data$stamina / player_data$strength
+head(player_data$endurance_to_strength_ratio)
+```
+
+### Explaination
+
+This new variable represents the ratio between stamina and strength. It tells us how much endurance a player has in relation to their strength. A higher ratio indicates that a player has relatively more stamina compared to their physical strength, while a lower ratio suggests that their strength is more dominant over endurance. This is useful for determining the position a player can play in.   
+
+## Plotting the pairs to find the outliers
+
+
+### Plot Pair 1: Value in Euros vs. Overall Rating
+```{r}
+# Bin overall_rating and strength into intervals of 10 (10-20, 20-30, ..., 90-100)
+player_data$overall_rating_bin <- cut(player_data$overall_rating, 
+                                      breaks = seq(10, 100, by = 10),
+                                      include.lowest = TRUE, 
+                                      right = FALSE) # Left-inclusive intervals
+
+player_data$strength_bin <- cut(player_data$strength, 
+                                breaks = seq(10, 100, by = 10),
+                                include.lowest = TRUE, 
+                                right = FALSE)
+
+# Create a box plot for Value in Euros vs. Overall Rating
+ggplot(player_data, aes(x = overall_rating_bin, y = value_euro)) +
+  geom_boxplot() +
+  labs(title = "Box Plot: Value in Euros vs. Overall Rating (Binned)",
+       x = "Overall Rating (Binned by 10s)",
+       y = "Value in Euros") +
+  theme_minimal()
+
+```
+
+### Observations
+These are players with much higher market value than expected for their rating. Possible reasons for this maybe that they are young players with high potential driving up their value even though their overall rating is lower.
+
+### Plot Pair 2: Stamina vs. Strength
+
+```{r}
+
+ggplot(player_data, aes(x = strength_bin, y = stamina)) +
+  geom_boxplot() +
+  labs(title = "Box Plot: Stamina vs. Strength (Binned)",
+       x = "Strength (Binned by 10s)",
+       y = "Stamina") +
+  theme_minimal()
+```
+
+### observations
+There are few players with significantly high stamina compared to their peers in the same strength group but we mostly observe that there are a lot of players with lower stamina at the same strength range compared to their peers. This might be because they might be older players who have retained their strength but their stamina has dropped.
+
+## Calculating Pearson's correlation co-efficient for these pairs 
+
+### Pearson's co-efficient for Pair 1: Value in Euros vs. Overall Rating
+
+```{r}
+# Calculating the correlation for Pair 1: value_euro vs. overall_rating
+cor_value_rating <- cor(player_data$value_euro, player_data$overall_rating, use = "complete.obs")
+cat("Correlation between value_euro and overall_rating:", cor_value_rating, "\n")
+```
+### Observations
+This correlation is expected to be positive and relatively strong, since a higher overall rating generally corresponds to a higher market value for a player. This is logical because players with better skills and performances are more valuable in the transfer market.
+
+### Pearson's co-efficient for Pair 1: Value in Euros vs. Overall Rating
+
+```{r}
+# Calculating the correlation for Pair 2: stamina vs. strength
+cor_stamina_strength <- cor(player_data$stamina, player_data$strength, use = "complete.obs")
+cat("Correlation between stamina and strength:", cor_stamina_strength, "\n")
+```
+
+### Observations 
+This correlation is expected to be positive, but possibly weaker than the first pair. Although strength and stamina are both physical attributes, they measure different aspects of a player's fitness. Some players might have high stamina but moderate strength, or vice versa, depending on their position or training focus.
+
+## Confidence intervals for this data
+
+```{r}
+# 95% Confidence Interval for value_euro (Response Variable 1)
+ci_value_euro <- t.test(player_data$value_euro)$conf.int
+
+# 95% Confidence Interval for stamina (Response Variable 2)
+ci_stamina <- t.test(player_data$stamina)$conf.int
+
+# Display the results
+cat("95% Confidence Interval for value_euro:", ci_value_euro, "\n")
+cat("95% Confidence Interval for stamina:", ci_stamina, "\n")
+
+
+```
+
+### Plotting the Visualisation for this data
+
+```{r}
+# Calculate the means and confidence intervals for both variables
+mean_value_euro <- mean(player_data$value_euro, na.rm = TRUE)
+ci_value_euro <- t.test(player_data$value_euro)$conf.int
+
+mean_stamina <- mean(player_data$stamina, na.rm = TRUE)
+ci_stamina <- t.test(player_data$stamina)$conf.int
+
+# Density plot (line graph) for value_euro with Confidence Interval
+ggplot(player_data, aes(x = value_euro)) +
+  geom_density(fill = "skyblue", alpha = 0.4, color = "blue") +  # Density line (smoothed)
+  geom_vline(aes(xintercept = mean_value_euro), color = "red", linetype = "dashed", size = 1.2) +  # Mean line
+  geom_vline(aes(xintercept = ci_value_euro[1]), color = "blue", linetype = "dotted", size = 1) +  # Lower CI bound
+  geom_vline(aes(xintercept = ci_value_euro[2]), color = "blue", linetype = "dotted", size = 1) +  # Upper CI bound
+  labs(title = "Density Plot for Market Value (Euro)",
+       x = "Market Value (Euro)", y = "Density") +
+  xlim(0, 1e7) +  # Set the limit for the x-axis
+  theme_minimal()
+```
+
+### Observations
+The density plot for market value exhibits a highly skewed distribution with a very pronounced peak near zero, suggesting that a significant number of players have a low market value. The tail extends into higher values, indicating that while most players are valued lower, there are a few with very high market values.
+
+#### Mean and Confidence Interval: 
+The dashed red line indicates the mean market value. The confidence interval for this variable should reflect a broad range, capturing the significant variability in player market values. Given the skewness, the mean might be influenced heavily by the few players with extremely high values.
+
+```{r}
+
+# Density plot (line graph) for stamina with Confidence Interval
+ggplot(player_data, aes(x = stamina)) +
+  geom_density(fill = "lightgreen", alpha = 0.4, color = "green") +  # Density line (smoothed)
+  geom_vline(aes(xintercept = mean_stamina), color = "red", linetype = "dashed", size = 1.2) +  # Mean line
+  geom_vline(aes(xintercept = ci_stamina[1]), color = "blue", linetype = "dotted", size = 1) +  # Lower CI bound
+  geom_vline(aes(xintercept = ci_stamina[2]), color = "blue", linetype = "dotted", size = 1) +  # Upper CI bound
+  labs(title = "Density Plot for Stamina",
+       x = "Stamina", y = "Density") +
+  theme_minimal()
+
+```
+
+
+### Observations
+The density plot for stamina appears to be more normally distributed, with a clear peak around 75. This suggests that a majority of players have stamina levels around this value, indicating a more uniform distribution compared to market values.
+
+#### Mean and Confidence Interval: 
+The mean stamina, also indicated by the dashed line, likely falls around the peak of the distribution. The confidence interval should be narrower compared to that of market value, reflecting the lesser variability in stamina levels among players.
+
+
+
+
+
+
+END

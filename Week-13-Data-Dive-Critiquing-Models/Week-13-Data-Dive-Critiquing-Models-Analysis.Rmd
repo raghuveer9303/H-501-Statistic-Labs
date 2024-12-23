@@ -1,0 +1,243 @@
+---
+title: "Data-Dive-Week-13-Critiquing-Models-Analysis"
+author: "Raghuveer Venkatesh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Goal 1: Business Scenario
+
+-   **Customer or Audience**: United Nation
+-   **Problem Statement**: UN has received an additional budget of \$5M and has approached us as they would like a report on which countries this additional budget can be utilized to have maxiumum impact
+-   **Scope**: Population, GDP per ca-pita, Life Expectancy.
+-   **Objective**: Identify the top 5 countries where infusion of these funds can result in the highest increase of life expectancy.
+
+```{r include=FALSE}
+library(gapminder)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+colnames(gapminder)
+
+```
+
+## Goal 2: Model Critique
+
+### Analysis 1: Countries most in need at present
+
+#### Improvements 
+**This is a statistical improvement as Individual context matters.**
+This analysis aims to identify countries currently most in need of healthcare or economic interventions, using a country-specific approach that focuses on intrinsic data rather than regional or neighbor-based comparisons
+
+We will first take the top 50 countries with the lowest life expectancy and GDP per ca-pita in the latest available year data.
+
+Why this is important: \* Lower GDP and life expectancy means that they have poor healthcare systems, inadequate nutrition and limited access to basic services. \* Small investments may yield significant improvements in these countries because of the low baseline conditions.
+
+Hence, This data helps to prioritize countries where the funds can have the greatest proportional impact.
+
+```{r}
+alldata <- gapminder_unfiltered
+
+latest_year_data <- gapminder_unfiltered |>
+  filter(year == max(year))
+
+countries_most_in_need_10 <- latest_year_data |>
+  arrange(lifeExp, gdpPercap) |>
+  head(50) |>
+  select(country,continent,lifeExp,gdpPercap,pop, year)
+
+
+ggplot(countries_most_in_need_10, aes(x = gdpPercap, y = lifeExp)) +
+  geom_point(color = "blue") +   # Blue points for simplicity
+  labs(
+    title = "Top 50 Countries by Lowest Life Expectancy and GDP per Capita",
+    x = "GDP per Capita",
+    y = "Life Expectancy"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+print(head(countries_most_in_need_10))
+```
+
+The table above is giving more importance to life Exp and we are not taking gdp per ca-pita in consideration so we can combine both using weighted sum to get the countries which have the lowest gdp and life expectancy when both are considered equally.
+
+50% gdp per ca-pita and 50% life expectancy
+
+```{r}
+# Combine GDP per capita and life expectancy using weighted sum
+top_50_countries <- countries_most_in_need_10 |>
+  mutate(combined_score = 0.5 * gdpPercap + 0.5 * lifeExp) |>
+  arrange(combined_score)
+
+print(top_50_countries)
+```
+
+#### Observations
+
+We could identify that the majority of the low GDP and low expectancy countries are in Africa and Myanmar and Afganistan outside of Africa.
+
+### Analysis 1.2: Pearson-R co-efficient to measure the correlation between GDP per capita and life expectancy
+
+
+This is necessary because if the life expectancy doesn't increase with GDP per ca-pita then we have correctly weighed them by giving 50-50 weightage. But if they have a strong correlation then we can give a higher weight to life expectancy as that is one of the main variables we are trying to maximize.
+
+```{r}
+correlation <- cor(top_50_countries$gdpPercap, top_50_countries$lifeExp)
+print(paste("Correlation between GDP and Life Expectancy is ",correlation))
+```
+
+There is a weak correlation between the two so it doesn't make sense to adjust the weightage.
+
+So we can keep it at 50:50
+
+### Analysis 2: Identify countries in the top 50 which are improving year on year as they won't require that much help.
+
+#### Improvements 
+**This is a statistical improvement as a combined score of life expectancy and gdp is a more robust metric for analysis than assessing them independently as was done in the Week 6 notebook** 
+
+It gives a more holistic evaluation of the current situation of the countries.
+
+We will see which countries are already improving their life expectancy in the bottom 50 so that we can omit those countries.
+
+```{r}
+
+top_20_countries <- top_50_countries |> arrange(combined_score) |> head(20)
+
+yearly_improvement <- gapminder_unfiltered |>
+  group_by(country) |>
+  arrange(country, year) |>
+  mutate(life_expectancy_change = lifeExp - lag(lifeExp)) |>
+  filter(country %in% top_20_countries$country) |>
+  filter(!is.na(life_expectancy_change))
+
+
+
+
+ggplot(yearly_improvement, aes(x = year, y = lifeExp, color = country)) +
+  geom_line(size = 0.5) +
+  geom_point(aes(size = abs(life_expectancy_change)), alpha = 1) +
+  labs(
+    title = "Yearly Improvement in Life Expectancy for Bottom 10 Countries",
+    x = "Year",
+    y = "Life Expectancy",
+    color = "Country"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "left") +
+  scale_size_continuous(name = "Yearly Change Magnitude")
+
+```
+
+```{r}
+
+top_20_countries <- yearly_improvement  |> summarise(total_improvement = sum(life_expectancy_change, na.rm = TRUE)) |> arrange(total_improvement)
+
+print(top_20_countries)
+
+```
+
+```{r}
+
+countries_needing_help <- merge(top_20_countries, top_50_countries, by="country")
+
+```
+
+#### Observations
+
+We could see that Zimbabwe has reduced life expectancy and the other countries have shown minimal improvement in comparison.So we can recommend the following countries to the UN
+
+-   Zimbabwe
+-   Rwanda
+-   Liberia
+-   Dem Rep Congo
+-   Central African Republic
+
+### Analysis 3: Bootstrapping the data and estimating the confidence intervals
+
+We do this so we can assess the uncertainty in the combined scores and provide estimates for improvements.
+
+#### Improvements 
+**We consider the combined score for bootstrapping rather than the individual columns which will give a more whole image of how accurate our metric of improvement index is** 
+
+**We have also improved the visualization previously adding the magnitude of the change in the life expectancy and taking the absolute change in life expectancy as bubbles**
+
+```{r}
+countries_of_interest <- data.frame(
+  country = c("Zimbabwe", "Rwanda", "Liberia", "Democratic Republic of Congo", "Central African Republic")
+)
+
+bootstrap_input_data <- gapminder |> 
+  filter(country %in% countries_of_interest$country) |> 
+  mutate(combined_score = 0.5 * gdpPercap + 0.5 * lifeExp) |> 
+  arrange(combined_score)
+
+n_iterations <- 100
+
+bootstrap_results <- replicate(n_iterations, {
+  resampled_data <- bootstrap_input_data[sample(nrow(bootstrap_input_data), replace = TRUE), ]
+  mean_combined_score <- mean(resampled_data$combined_score, na.rm = FALSE)
+  return(mean_combined_score)
+})
+
+
+ci_lower <- quantile(bootstrap_results, 0.025, na.rm = TRUE)
+ci_upper <- quantile(bootstrap_results, 0.975, na.rm = TRUE)
+
+bootstrap_df <- data.frame(bootstrap_results)
+
+ggplot(bootstrap_df, aes(x = bootstrap_results)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  geom_vline(aes(xintercept = ci_lower), color = "red", linetype = "dashed") +
+  geom_vline(aes(xintercept = ci_upper), color = "red", linetype = "dashed") +
+  labs(
+    title = "Bootstrap Distribution of Combined Scores for Recommended Countries",
+    x = "Combined Score",
+    y = "Frequency"
+  ) +
+  theme_minimal()
+
+```
+
+### Observation
+
+The confidence interval is more spread out so there is a slight amount of uncertainty and additional data might be required to reliably use this data.
+
+## Goal 3: Ethical and Epistemological Concerns
+
+#### Data Risks
+* Data collection might be incomplete or skewed due to under-reporting in low-resource countries.
+* Many other key metrics are missing in the data set which can paint a more clear picture like mortality rate by specific age group and infant mortality rates.
+
+#### Risks
+* Prioritizing already improving nations night neglect stagnant or regressive countries in need of immediate intervention if we are wrong.
+* GDP and life expectancy metrics may be too broad to understand ground reality in the countries analyzed.
+
+#### Analytical risks
+* This analysis only focus on GDP, Avg. Life expendency but these are not the accurate measures of standard of life and their health services.
+
+#### Crucial issues that cannot be measured.
+* Political instability or conflict impacts healthcare and economic indicators but cannot be measured.
+* History of the country which has led to these conditions cannot be measured.
+
+### Who would be impacted by this project ?
+* Citizens of the respective countries
+* NGOs in the respective countries
+* AID organizations
+
+### Critical Evaluation and Recommendations
+* Work with local government when delivering aid
+* Impact evaluation after aid is delivered
+* ethical handling of the health data.
+* Additional data collection like age demographics etc., which can be used to improve our future analysis
+
+
+
+
+
+
+#################
+
+

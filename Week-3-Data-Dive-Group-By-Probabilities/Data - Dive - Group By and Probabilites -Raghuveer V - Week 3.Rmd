@@ -1,0 +1,256 @@
+---
+title: "Data Dive - Group By and Probabilities"
+author: "Raghuveer Venkatesh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("C:/Users/raghu/OneDrive/Documents/Statistics_with_R/Week 3 Group By and Probabilities")
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(knitr)
+Fifa_Players_Data <- read_csv("fifa_players.csv")
+View(Fifa_Players_Data)
+spec(Fifa_Players_Data)
+```
+
+# Introduction
+In this analysis, we will explore FIFA player data by grouping the data into different sets based on categorical columns and summarizing various continuous variables.
+
+We will create 3 group by data frames each focusing on different categorical columns, summarizing either continuous or other relevant data points. We will then investigate each of these groups and draw conclusions based on our analysis.
+
+# Group by International reputation and calculate average overall rating
+```{r}
+reputation_summary <- Fifa_Players_Data |>
+  group_by(`international_reputation(1-5)`) |>
+  summarise(average_overall_rating = mean(overall_rating, na.rm = TRUE)) |>
+  arrange(desc(average_overall_rating))
+```
+
+## Tagging the lowest probability group
+```{r}
+reputation_summary <- reputation_summary |>
+  mutate(tag = if_else(`international_reputation(1-5)` == 1, "Lowest Probability Group", "Other"))
+print(reputation_summary)
+```
+## Visualization of average overall rating by international reputation
+
+International Reputation vs. Average Rating: This visualization helps in understanding how international recognition correlates with overall player ratings.
+```{r}
+ggplot(reputation_summary, aes(x = as.factor(`international_reputation(1-5)`), y = average_overall_rating, fill = tag)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Average Overall Rating by International Reputation", x = "International Reputation (1-5)", y = "Average Overall Rating") +
+  theme_minimal()
+```
+
+## Conclusions and Observations:
+
+The group with an international reputation of 1 has the lowest average overall ratings. This suggests that players with this reputation are generally less recognized and may not be as highly valued in the football community. They are likely less experienced in international matches or less visible in high-profile competitions.
+
+## Hypothesis: 
+Players with the lowest international reputation (1) are rarer in the data set because they are less likely to be selected for high-profile teams or international competitions due to their perceived lower skill level or experience.
+
+
+# Group by Nationality
+## Grouping and Summary
+```{r}
+# Group by Nationality
+group_nationality <- Fifa_Players_Data |>
+  group_by(nationality) |>
+  summarise(
+    avg_value = mean(value_euro, na.rm = TRUE),
+    avg_wage = mean(wage_euro, na.rm = TRUE),
+    count = n()
+  ) |>
+  arrange(desc(count))
+
+print(group_nationality)
+
+```
+
+## Visualisation
+The chart depicts that certain nationalities dominate the player pool. Major footballing countries like Brazil, Spain, and Germany have the largest representation.
+
+```{r}
+
+# Taking top 10 nationalities
+top_10_nationalities <- group_nationality |>
+  arrange(desc(count)) |>
+  slice_head(n = 10)  # Select the top 10 rows
+
+
+#Visualization of average wages by nationality (top 10)
+
+ggplot(top_10_nationalities, aes(x=reorder(nationality, -count), y=count)) +
+  geom_bar(stat="identity", fill="forestgreen") +
+  labs(title="Top 10 Nationalities by Player Count", x="Nationality", y="Number of Players") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+## Conclusions and Observations:
+* Certain nationalities dominate the player pool. Major footballing countries like Brazil, Spain, and Germany have the largest representation.
+* Less common nationalities are not represented in this chart, but they exist in smaller quantities outside the top 10.
+
+```{r}
+
+lowest_nationality_group <- group_nationality %>%
+  filter(count == min(count)) %>%
+  mutate(tag = "Rare Group")
+
+print(lowest_nationality_group)
+```
+
+## Hypothesis
+Countries with smaller populations or less established football infrastructures naturally produce fewer professional players. Players from these nations have a lower probability of appearing in the dataset.
+
+# Group by Position
+## Grouping and Summarizing
+
+```{r}
+# Group by Position
+
+group_position <- Fifa_Players_Data |>
+  group_by(positions) |>
+  summarise(
+    avg_value = mean(value_euro, na.rm = TRUE),
+    avg_wage = mean(wage_euro, na.rm = TRUE),
+    count = n()
+  ) |>
+  arrange(desc(count))
+
+group_position
+
+
+```
+
+## Visualisation
+A bar chart showing the number of players per position, highlighting the rarity of goalkeepers.
+```{r}
+top_5_positions <- group_position |>
+  arrange(desc(count)) |>
+  slice_head(n = 5)
+
+# Find the lowest position
+lowest_position <- group_position |>
+  arrange(count) |>
+  slice_head(n = 5) |>
+  mutate(tag = "Rare Group")
+
+# Combine top 5 and lowest position
+positions_to_plot <- bind_rows(top_5_positions, lowest_position)
+
+# Plotting Positions by Player Count
+ggplot(positions_to_plot, aes(x=reorder(positions, -count), y=count)) +
+  geom_bar(stat="identity", fill="darkorange") +
+  labs(title="Number of Players by Position", x="Position", y="Number of Players") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+## Conclusions and Observations 
+* Infield positions such as defenders and goalkeepers are the most common, while strikers and central midfielders have the lowest representation.
+* This aligns with the fact that a team typically has more defensive players than offensive players
+
+
+```{r}
+print(lowest_position)
+```
+
+## Hypothesis
+Players in these positions are one in a million because they require a wider range of skills, blending both offense and defense, making it harder to find players that excel in all these aspects thus making a small appearance in the data set.
+
+
+# Analysis of Categorical Variables
+We will continue analysis of the categorical variables by the following steps:
+
+1. Build a data frame of all possible combinations of the two categorical variables.
+2. Identify combinations that do not exist in the data.
+3. Analyze the most and least common combinations.
+4. Visualize the results.
+
+## Generate all combinations of positions and nationality
+```{r}
+combinations <- expand.grid(
+  positions = unique(Fifa_Players_Data$positions),
+  nationality = unique(Fifa_Players_Data$nationality)
+)
+```
+## Find Missing Combinations
+```{r}
+# We have removed compound positions because of large result set
+missing_combinations <- anti_join(combinations, Fifa_Players_Data, by = c("positions", "nationality"))
+missing_combinations <- missing_combinations |>
+    filter(!str_detect(positions, ","))
+
+# Display the first 10 rows
+first_page <- missing_combinations %>% slice(1:10)
+kable(first_page, caption = "Missing Player Combinations (Page 1)")
+
+# Total number of rows
+total_rows <- nrow(missing_combinations)
+cat("Total rows:", total_rows, "\n")
+```
+## Hypotheses for missing positions in certain countries.
+Certain positions might be less common in certain countries due to regional playing styles or strategies.
+
+# Count occurrences of each combination
+```{r}
+combination_counts <- Fifa_Players_Data |>
+  count(positions, nationality) |>
+  arrange(desc(n)) # Sort by frequency in descending order
+```
+# Show the most and least common combinations
+### Most common
+```{r}
+most_common <- head(combination_counts)
+least_common <- tail(combination_counts)
+print(most_common)
+```
+### Least common
+```{r}
+print(least_common)
+```
+
+## Visualisation
+# Create a heatmap of the combinations
+```{r}
+# Assuming most_common and least_common are data frames with 'nationality' and 'n' columns
+top_most_common <- most_common |>
+  top_n(10, n) |>
+  mutate(group = "Most Common")
+
+top_least_common <- least_common |>
+  top_n(5, n) |>
+  mutate(group = "Least Common")
+
+# Combine both groups into one data frame
+combined_data <- bind_rows(top_most_common, top_least_common)
+
+# Create a new color scale for the groups
+color_scale <- scale_fill_manual(values = c("Most Common" = "blue", "Least Common" = "red"))
+
+filtered_combination_counts <- combination_counts |>
+  filter(nationality %in% combined_data$nationality)
+
+# Visualize the heat map
+ggplot(combined_data, aes(x = positions, y = nationality, fill = group)) +
+  geom_tile() +
+  color_scale +
+  labs(title = "Heatmap of Top 10 Most Common and Top 5 Least Common Combinations", 
+       x = "Position", 
+       y = "Nationality", 
+       fill = "Group") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+## Observations and Conclusion
+* Players in all positions are highly represented among English players in this data set. This suggests that English teams or leagues have a deep talent pool, with strikers being particularly common.
+* Argentina has a huge talent pool with defenders being the most common position.
+* Positions which require both Offensive and Defensive attributes are least common because of the unique requirements.
+
+
+
+# The End
